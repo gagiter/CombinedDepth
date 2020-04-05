@@ -40,12 +40,12 @@ class Data(Dataset):
         # next = None if item['next'] == 'None' else os.path.join(root, item['next'])
 
         image = Image.open(image)
-        image = TF.resize(image, 256)
+        # image = TF.resize(image, 256, interpolation=)
         image = TF.center_crop(image, (256, 512))
         image = TF.to_tensor(image)
 
         depth = Image.open(depth)
-        depth = TF.resize(depth, 256)
+        # depth = TF.resize(depth, 256)
         depth = TF.center_crop(depth, (256, 512))
         depth = TF.to_tensor(depth).float()
         depth /= (256.0 * 80.0)
