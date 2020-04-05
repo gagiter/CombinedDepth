@@ -7,9 +7,12 @@ import segmentation_models_pytorch as smp
 from torch.utils.tensorboard import SummaryWriter
 import os
 from criteria import Criteria
+from model import Model
 
 parser = argparse.ArgumentParser(description='CombinedDepth')
-parser.add_argument('--batch-size', type=int, default=16)
+parser.add_argument('--data_root', type=str, default='data')
+parser.add_argument('--model_name', type=str, default='model')
+parser.add_argument('--batch-size', type=int, default=2)
 parser.add_argument('--resume', action='store_true', default=False)
 parser.add_argument('--no-cuda', action='store_true', default=False)
 parser.add_argument('--gpu_id', type=int, default=1)
@@ -21,33 +24,36 @@ parser.add_argument('--summary_freq', type=int, default=1)
 parser.add_argument('--save_freq', type=int, default=10)
 args = parser.parse_args()
 
+use_cuda = torch.cuda.is_available() and not args.no_cuda
+args.device = torch.device('cuda:%d' % args.gpu_id if use_cuda else 'cpu')
+
 
 def train():
 
-    use_cuda = torch.cuda.is_available() and not args.no_cuda
-    device = torch.device('cuda:%d' % args.gpu_id if use_cuda else 'cpu')
-
-    train_data = dataset.Data(args)
-    val_data = dataset.Data(args)
+    train_data = dataset.Data(args, mode='train')
+    # val_data = dataset.Data(args, mode='val')
 
     train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
-    model = smp.Unet('resnet34', encoder_weights=None, activation='sigmoid')
-    model = model.to(device)
+    # model = smp.Unet('resnet34', encoder_weights=None, activation='sigmoid')
+    model = Model()
+    model = model.to(args.device)
+
     optimiser = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
     writer = SummaryWriter()
     criteria = Criteria()
 
-    if args.resume:
-        model.load_state_dict(torch.load(os.path.join('checkpoint', args.dataset, 'model.pth')))
-        optimiser.load_state_dict(torch.load(os.path.join('checkpoint', args.dataset, 'optimiser.pth')))
-        args.epoch_start = torch.load(os.path.join('checkpoint', args.dataset, 'epoch.pth'))['epoch']
+    save_dir = os.path.join('checkpoint', args.model_name)
+    if args.resume and os.path.exists(save_dir):
+        model.load_state_dict(torch.load(os.path.join(save_dir, 'model.pth')))
+        optimiser.load_state_dict(torch.load(os.path.join(save_dir, 'optimiser.pth')))
+        args.epoch_start = torch.load(os.path.join(save_dir, 'epoch.pth'))['epoch']
 
     for epoch in range(args.epoch_start, args.epoch_start + args.epoch_num):
-        model.train()
+        # model.train()
         train_losses = []
-        for data in train_loader:
-            predict = model(data)
-            loss = criteria(predict, data)
+        for data_in in train_loader:
+            data_out = model(data_in)
+            loss = criteria(data_in, data_out)
             optimiser.zero_grad()
             loss.backward()
             train_losses.append(loss.item())
@@ -57,7 +63,8 @@ def train():
             loss = sum(train_losses) / len(train_losses)
             print(epoch, loss)
             writer.add_scalar('loss', loss, global_step=epoch)
-            # writer.add_image('image/color', color[0], global_step=epoch)
+            writer.add_image('image/depth', data_out['depth'][0], global_step=epoch)
+            writer.add_image('image/depth_n', data_in['depth'][0], global_step=epoch)
             # writer.add_image('image/label', label[0], global_step=epoch)
             # writer.add_image('image/depth', depth[0], global_step=epoch)
             # writer.add_image('image/predict', output[0], global_step=epoch)
@@ -66,12 +73,13 @@ def train():
             # writer.add_image('image/dist', dist[0], global_step=epoch)
 
         if epoch % args.save_freq == 0:
-            torch.save(model.state_dict(), os.path.join('checkpoint', args.dataset, 'model.pth'))
-            torch.save(optimiser.state_dict(), os.path.join('checkpoint', args.dataset, 'optimiser.pth'))
-            torch.save({'epoch': epoch}, os.path.join('checkpoint', args.dataset, 'epoch.pth'))
+            os.makedirs(save_dir, exist_ok=True)
+            torch.save(model.state_dict(), os.path.join('checkpoint', args.model_name, 'model.pth'))
+            torch.save(optimiser.state_dict(), os.path.join('checkpoint', args.model_name, 'optimiser.pth'))
+            torch.save({'epoch': epoch}, os.path.join('checkpoint', args.model_name, 'epoch.pth'))
             # torch.save(train_losses, 'train_losses.pth')
-    print('train')
-    pass
+
+    writer.close()
 
 
 if __name__ == '__main__':
