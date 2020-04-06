@@ -9,16 +9,17 @@ import torch
 
 
 class Data(Dataset):
-    def __init__(self, args, mode='train'):
+    def __init__(self, data_root, mode='train', device='cpu'):
         super(Data, self).__init__()
-        self.args = args
+        self.data_root = data_root
         self.mode = mode
+        self.device = device
         self.data = []
         self.load_data()
 
     def load_data(self):
         csv_name = self.mode + '.csv'
-        for root, dirs, files in os.walk(self.args.data_root):
+        for root, dirs, files in os.walk(self.data_root):
             if csv_name in files:
                 with open(os.path.join(root, csv_name)) as csv_file:
                     csv_reader = csv.reader(csv_file)
@@ -35,26 +36,39 @@ class Data(Dataset):
         item = self.data[idx][1]
         image = os.path.join(root, item['image'])
         depth = None if item['depth'] == 'None' else os.path.join(root, item['depth'])
-        stereo = None if item['stereo'] == 'None' else os.path.join(root, item['stereo'])
-        previous = None if item['previous'] == 'None' else os.path.join(root, item['previous'])
-        # next = None if item['next'] == 'None' else os.path.join(root, item['next'])
+        ref = dict()
+        for ref_key in ['stereo', 'previous', 'next']:
+            ref[ref_key] = None if item[ref_key] == 'None' \
+                else os.path.join(root, item[ref_key])
 
+        out = dict()
         image = Image.open(image)
         # image = TF.resize(image, 256, interpolation=)
         image = TF.center_crop(image, (256, 512))
         image = TF.to_tensor(image)
+        out['image'] = image
 
-        depth = Image.open(depth)
-        # depth = TF.resize(depth, 256)
-        depth = TF.center_crop(depth, (256, 512))
-        depth = TF.to_tensor(depth).float()
-        depth /= (256.0 * 80.0)
-        mask = depth > 0.0
-        mask &= depth < 1.0
-        depth *= mask
+        if depth:
+            depth = Image.open(depth)
+            # depth = TF.resize(depth, 256)
+            depth = TF.center_crop(depth, (256, 512))
+            depth = TF.to_tensor(depth).float()
+            depth /= (256.0 * 80.0)
+            mask = depth > 0.0
+            mask &= depth < 1.0
+            depth *= mask
+            out['depth'] = depth
+            out['mask'] = mask
 
-        return {
-            'image': image.to(self.args.device),
-            'depth': depth.to(self.args.device),
-            'mask': mask.to(self.args.device)
-        }
+        for ref_key in ref:
+            if ref[ref_key] is not None:
+                ref[ref_key] = Image.open(ref[ref_key])
+                # stereo = TF.resize(stereo, 256)
+                ref[ref_key] = TF.center_crop(ref[ref_key], (256, 512))
+                ref[ref_key] = TF.to_tensor(ref[ref_key])
+                out[ref_key] = ref[ref_key]
+
+        for out_item in out:
+            out[out_item] = out[out_item].to(self.device)
+
+        return out
