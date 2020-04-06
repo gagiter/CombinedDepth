@@ -12,11 +12,11 @@ import util
 
 parser = argparse.ArgumentParser(description='CombinedDepth')
 parser.add_argument('--data_root', type=str, default='data')
-parser.add_argument('--encoder', type=str, default='resnet34') # mobilenet_v2
+parser.add_argument('--encoder', type=str, default='resnet34')  # mobilenet_v2
 parser.add_argument('--model_name', type=str, default='model')
-parser.add_argument('--batch-size', type=int, default=2)
+parser.add_argument('--batch_size', type=int, default=2)
 parser.add_argument('--resume', action='store_true', default=False)
-parser.add_argument('--no-cuda', action='store_true', default=False)
+parser.add_argument('--no_cuda', action='store_true', default=False)
 parser.add_argument('--gpu_id', type=int, default=1)
 parser.add_argument('--lr', type=float, default=0.01)
 parser.add_argument('--momentum', type=float, default=0.5)
@@ -26,19 +26,18 @@ parser.add_argument('--summary_freq', type=int, default=100)
 parser.add_argument('--save_freq', type=int, default=100)
 args = parser.parse_args()
 
-use_cuda = torch.cuda.is_available() and not args.no_cuda
-args.device = torch.device('cuda:%d' % args.gpu_id if use_cuda else 'cpu')
-
 
 def train():
+    use_cuda = torch.cuda.is_available() and not args.no_cuda
+    device = torch.device('cuda:%d' % args.gpu_id if use_cuda else 'cpu')
 
-    train_data = dataset.Data(args, mode='train')
+    train_data = dataset.Data(args.data_root, mode='train', device=device)
     # val_data = dataset.Data(args, mode='val')
 
-    train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
+    train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=False)
     # model = smp.Unet('resnet34', encoder_weights=None, activation='sigmoid')
     model = Model(args.encoder)
-    model = model.to(args.device)
+    model = model.to(device)
 
     optimiser = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
     writer = SummaryWriter()
