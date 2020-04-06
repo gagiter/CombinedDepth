@@ -9,6 +9,8 @@ import os
 from criteria import Criteria
 from model import Model
 import util
+import open3d as o3d
+import numpy as np
 
 parser = argparse.ArgumentParser(description='CombinedDepth')
 parser.add_argument('--data_root', type=str, default='data')
@@ -42,6 +44,7 @@ def train():
     optimiser = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
     writer = SummaryWriter()
     criteria = Criteria()
+    pcd = o3d.geometry.PointCloud()
 
     save_dir = os.path.join('checkpoint', args.model_name)
     if args.resume and os.path.exists(save_dir):
@@ -63,13 +66,23 @@ def train():
         if epoch % args.summary_freq == 0:
             loss = sum(train_losses) / len(train_losses)
             print(epoch, loss)
-            util.colorize(data_in)
-            util.colorize(data_out)
+            util.visualize(data_in)
+            util.visualize(data_out)
             writer.add_scalar('loss', loss, global_step=epoch)
             writer.add_image('image/image', data_in['image'][0], global_step=epoch)
             writer.add_image('image/mask', data_in['mask'][0], global_step=epoch)
-            writer.add_image('image/depth_in', data_in['depth_c'][0], global_step=epoch)
-            writer.add_image('image/depth_out', data_out['depth_c'][0], global_step=epoch)
+            writer.add_image('image/depth_in', data_in['depth_v'][0], global_step=epoch)
+            writer.add_image('image/depth_out', data_out['depth_v'][0], global_step=epoch)
+            for warp in ['warp_stereo', 'warp_previous', 'warp_next']:
+                if warp in data_out:
+                    writer.add_image('image/' + warp,
+                                     data_out[warp][0], global_step=epoch)
+            for motion in ['motion_stereo', 'motion_previous', 'motion_next']:
+                if motion in data_out:
+                    writer.add_text('text/' + motion,
+                                    str(data_out[motion][0].data.cpu().numpy()),
+                                    global_step=epoch)
+
             # writer.add_image('image/label', label[0], global_step=epoch)
             # writer.add_image('image/depth', depth[0], global_step=epoch)
             # writer.add_image('image/predict', output[0], global_step=epoch)
@@ -79,13 +92,25 @@ def train():
 
         if epoch % args.save_freq == 0:
             os.makedirs(save_dir, exist_ok=True)
-            torch.save(model.state_dict(), os.path.join('checkpoint', args.model_name, 'model.pth'))
-            torch.save(optimiser.state_dict(), os.path.join('checkpoint', args.model_name, 'optimiser.pth'))
-            torch.save({'epoch': epoch}, os.path.join('checkpoint', args.model_name, 'epoch.pth'))
+            torch.save(model.state_dict(), os.path.join(save_dir, 'model.pth'))
+            torch.save(optimiser.state_dict(), os.path.join(save_dir, 'optimiser.pth'))
+            torch.save({'epoch': epoch}, os.path.join(save_dir, 'epoch.pth'))
+
+            points = util.unproject(data_out['depth'], data_out['camera'])
+            points = points[0].data.cpu().numpy()
+            points = points.transpose(1, 2, 0).reshape(-1, 3)
+            pcd.points = o3d.utility.Vector3dVector(points)
+            o3d.io.write_point_cloud(os.path.join(save_dir, 'points.ply'), pcd)
+
+
             # torch.save(train_losses, 'train_losses.pth')
 
     writer.close()
 
 
 if __name__ == '__main__':
+    # pcd = o3d.geometry.PointCloud()
+    # points = np.random.rand(100, 3)
+    # pcd.points = o3d.utility.Vector3dVector(points)
+    # o3d.io.write_point_cloud("points.ply", pcd)
     train()
