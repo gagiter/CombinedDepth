@@ -14,7 +14,7 @@ class Vector(torch.nn.Module):
         x = self.net(x)
         x = self.conv(x[-1])
         x = torch.sigmoid(x)
-        x = x.mean(dim=[-2, -1])
+        x = x.mean(dim=[-2, -1]) - 0.5
         return x
 
 
@@ -29,12 +29,14 @@ class Model(torch.nn.Module):
         data_out = dict()
         image = data['image']
         data_out['depth'] = self.depth_net(image)
-        data_out['camera'] = self.camera_net(image)
+        # data_out['depth'] = -40.0 * torch.log(data_out['depth'])  # z = exp(-0.025 * d)
+        data_out['depth'] = data_out['depth'] * 100.0  # z = d * 100.0
+        data_out['camera'] = self.camera_net(image) * 0.01
 
         for ref in ['stereo', 'previous', 'next']:
             if ref in data:
                 image_ref = data[ref]
                 image_stack = torch.cat([image, image_ref], dim=1)
-                data_out['motion_' + ref] = self.motion_net(image_stack)
+                data_out['motion_' + ref] = self.motion_net(image_stack) * 0.1
 
         return data_out
