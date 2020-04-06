@@ -2,39 +2,45 @@
 import torch
 
 
-def colorize(data):
+def visualize(data):
     depth = data['depth']
-    red = depth
-    green = 1.0 - depth
-    blue = depth  # torch.zeros_like(depth)
-    color = torch.cat([red, green, blue], dim=1)
-    data['depth_c'] = color
+    depth = torch.exp(-0.025 * depth)
+    depth_i = 1.0 - depth
+    color = torch.cat([depth_i, depth_i, depth], dim=1)
+    data['depth_v'] = color
 
 
 def camera_scope(camera, shape):
-    half_fov_y = 0.25 + camera[:, 0]
+    half_fov_y = 0.42 + camera[:, 0]  # mean half_fov_y = 0.42 rad about 25 deg
     half_fov_x = half_fov_y * (1.0 + camera[:, 1]) * (shape[1] / shape[0])
     center_x = camera[:, 2]
     center_y = camera[:, 3]
-    left = center_x - torch.tan(half_fov_x)
-    right = center_y + torch.tan(half_fov_x)
-    top = center_y - torch.tan(half_fov_y)
-    bottom = center_y + torch.tan(half_fov_y)
-    return left, right, top, bottom
+    half_width = torch.tan(half_fov_x)
+    half_height = torch.tan(half_fov_y)
+    left = center_x - half_width
+    top = center_y - half_height
+    width = half_width * 2.0
+    height = half_height * 2.0
+    return torch.stack([left, top, width, height], dim=-1)
 
 
 def near_grid(camera, shape, device):
-    left, right, top, bottom = camera_scope(camera, shape)
-    grid = []
-    for b in range(camera.shape[0]):
-        lin_x = torch.linspace(-1.0, 1.0, shape[1], device=device)
-        lin_y = torch.linspace(-1.0, 1.0, shape[0], device=device)
-        lin_x = 0.5 * lin_x * (right[b] - left[b]) + 0.5 * (right[b] + left[b])
-        lin_y = 0.5 * lin_y * (bottom[b] - top[b]) + 0.5 * (bottom[b] + top[b])
-        grid_y, grid_x = torch.meshgrid([lin_y, lin_x])
-        grid.append(torch.stack([grid_x, grid_y], dim=0))
+    scope = camera_scope(camera, shape)
+    grid_x = torch.linspace(-1.0, 1.0, shape[1], device=device)
+    grid_x = grid_x[None, ...]
+    grid_x = grid_x.repeat([camera.shape[0], 1])
+    grid_x = 0.5 * grid_x * scope[..., 2:3] + scope[..., 0:1] + 0.5 * scope[..., 2:3]
+    grid_x = grid_x.unsqueeze(1)
+    grid_x = grid_x.repeat([1, shape[0], 1])
 
-    grid = torch.stack(grid, dim=0)
+    grid_y = torch.linspace(-1.0, 1.0, shape[0], device=device)
+    grid_y = grid_y[None, ...]
+    grid_y = grid_y.repeat([camera.shape[0], 1])
+    grid_y = 0.5 * grid_y * scope[..., 3:4] + scope[..., 1:2] + 0.5 * scope[..., 3:4]
+    grid_y = grid_y.unsqueeze(-1)
+    grid_y = grid_y.repeat([1, 1, shape[1]])
+
+    grid = torch.stack([grid_x, grid_y], dim=1)
     return grid
 
 
@@ -46,12 +52,9 @@ def unproject(depth, camera):
 
 
 def sample(image, uv, camera, depth):
-    left, right, top, bottom = camera_scope(camera, image.shape[-2:])
-    left_top = torch.stack([left, top], dim=-1)
-    bottom_right = torch.stack([left, top], dim=-1)
-    left_top = left_top[..., None, None]
-    bottom_right = bottom_right[..., None, None]
-    uv = (uv - left_top) / (bottom_right - left_top)
+    scope = camera_scope(camera, image.shape[-2:])
+    uv = (uv - scope[..., 0:2, None, None]) / scope[..., 2:4, None, None]
+    uv = 2.0 * uv - 1.0
     uv = uv.permute(0, 2, 3, 1)
     sampled = torch.nn.functional.grid_sample(
         image, uv, mode='bilinear', align_corners=True)
