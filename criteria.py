@@ -1,5 +1,6 @@
 
 import torch.nn
+import util
 
 
 class Criteria(torch.nn.Module):
@@ -8,10 +9,10 @@ class Criteria(torch.nn.Module):
 
     def forward(self, data_in, data_out):
         loss = 0.0
+        depth_out = data_out['depth']
         if 'depth' in data_in:
             depth_in = data_in['depth']
             mask = data_in['mask']
-            depth_out = data_out['depth']
             loss_depth = ((depth_in - depth_out) * mask).abs().sum() / mask.sum()
             loss += loss_depth
 
@@ -19,12 +20,12 @@ class Criteria(torch.nn.Module):
             if ref in data_in:
                 image = data_in['image']
                 image_ref = data_in[ref]
-                depth = data_out['depth'] * 80.0
+                # depth = data_out['depth'] * 80.0
                 camera = data_out['camera']
-                motion_stereo = data_out['motion' + ref]
-                warp_ref = util.warp(image_ref, depth, camera, motion_stereo)
-                loss_ref = ((image - warp_ref) * mask).abs().sum() / mask.sum()
-                loss += loss_ref
+                motion = data_out['motion_' + ref]
+                warp = util.warp(image_ref, depth_out, camera, motion)
+                loss_ref = ((image - warp) * mask).abs().sum() / mask.sum()
+                # loss += loss_ref
 
         return loss
 
