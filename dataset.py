@@ -53,12 +53,12 @@ class Data(Dataset):
             # depth = TF.resize(depth, 256)
             depth = TF.center_crop(depth, (256, 512))
             depth = TF.to_tensor(depth).float()
-            depth /= (256.0 * 80.0)
-            mask = depth > 0.0
-            mask &= depth < 1.0
-            depth *= mask
+            depth /= 256.0
+            # mask = depth > 0.0
+            # mask &= depth < 1.0
+            # depth *= mask
             out['depth'] = depth
-            out['mask'] = mask
+            # out['mask'] = mask
 
         for ref_key in ref:
             if ref[ref_key] is not None:
