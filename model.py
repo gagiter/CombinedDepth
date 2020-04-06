@@ -4,11 +4,11 @@ import segmentation_models_pytorch as smp
 
 
 class Vector(torch.nn.Module):
-    def __init__(self, name='resnet34'):
+    def __init__(self, name='resnet34', in_channels=3, out_channels=5):
         super(Vector, self).__init__()
-        self.net = smp.encoders.get_encoder(name=name)
+        self.net = smp.encoders.get_encoder(name=name, in_channels=in_channels)
         last_channels = self.net.out_channels[-1]
-        self.conv = torch.nn.Conv2d(last_channels, 5, kernel_size=3, padding=1)
+        self.conv = torch.nn.Conv2d(last_channels, out_channels, kernel_size=3, padding=1)
 
     def forward(self, x):
         x = self.net(x)
@@ -22,8 +22,8 @@ class Model(torch.nn.Module):
     def __init__(self, encoder='resnet34'):
         super(Model, self).__init__()
         self.depth_net = smp.Unet(encoder, encoder_weights=None, activation='sigmoid')
-        self.camera_net = Vector(encoder)
-        self.motion_net = Vector(encoder)
+        self.camera_net = Vector(encoder, in_channels=3, out_channels=6)
+        self.motion_net = Vector(encoder, in_channels=6, out_channels=6)
 
     def forward(self, data):
         data_out = dict()
