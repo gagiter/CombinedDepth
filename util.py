@@ -1,5 +1,17 @@
 
 import torch
+import torch.nn.functional as F
+
+
+def grad(image):
+    filter_x = torch.tensor([[-0.25, 0.0, 0.25], [-0.5, 0.0, 0.5], [-0.25, 0.0, 0.25]],
+                            device=image.device).view(1, 1, 3, 3)
+    filter_y = torch.tensor([[-0.25, -0.5, -0.25], [0.0, 0.0, 0.0], [0.25, 0.5, 0.25]],
+                            device=image.device).view(1, 1, 3, 3)
+    grad_x = F.conv2d(image, filter_x, padding=1)
+    grad_y = F.conv2d(image, filter_y, padding=1)
+
+    return torch.cat([grad_x, grad_y], dim=1)
 
 
 def visualize(data):
