@@ -3,3 +3,7 @@
 /runs
 /.idea
 /__pycache__
+/lib/dist
+/lib/libwarp.egg-info
+/lib/build
+/lib/build-cmake
