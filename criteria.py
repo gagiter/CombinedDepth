@@ -4,12 +4,14 @@ import util
 
 
 class Criteria(torch.nn.Module):
-    def __init__(self, smooth_weight=1.0, ref_weight=1.0, depth_weight=1.0, down_times=4):
+    def __init__(self, smooth_weight=1.0, ref_weight=1.0, depth_weight=1.0,
+                 down_times=4, occlusion=True):
         super(Criteria, self).__init__()
         self.smooth_weight = smooth_weight
         self.ref_weight = ref_weight
         self.depth_weight = depth_weight
         self.down_times = down_times
+        self.occlusion = occlusion
 
     def forward(self, data_in, data_out):
         loss = 0.0
@@ -52,7 +54,8 @@ class Criteria(torch.nn.Module):
                         image_ref, size=(height, width), mode='bilinear', align_corners=True)
                     depth_out_down = torch.nn.functional.interpolate(
                         depth_out, size=(height, width), mode='bilinear', align_corners=True)
-                    warp = util.warp(image_ref_down, depth_out_down, camera, motion)
+                    warp = util.warp(image_ref_down, depth_out_down, camera, motion,
+                                     self.occlusion)
                     residual = (image_down - warp).abs()
                     data_out['residual_%s_%d' % (ref, i)] = residual
                     loss_ref += residual.mean()
