@@ -330,7 +330,7 @@ torch::Tensor warp_backward_with_occlusion_cuda(torch::Tensor image, torch::Tens
 	torch::TensorOptions option = torch::TensorOptions().dtype(torch::kInt32).device(occlusion.device());
 	torch::Tensor lock = torch::zeros_like(occlusion, option);
 	TORCH_CHECK(lock.dtype() == torch::kInt32);
-	torch::Tensor out = torch::zeros_like(image);
+	torch::Tensor out = torch::zeros_like(sample);
 	float* image_data = image.data<float>();
 	float* sample_data = sample.data<float>();
 	float* occlusion_data = occlusion.data<float>();
@@ -470,7 +470,7 @@ torch::Tensor warp_backward_with_occlusion(torch::Tensor image, torch::Tensor sa
 	TORCH_CHECK(sample.size(3) == width);
 	TORCH_CHECK(sample.device() == image.device());
 	TORCH_CHECK(occlusion.size(0) == batch_num);
-	TORCH_CHECK(occlusion.size(1) == channels);
+	TORCH_CHECK(occlusion.size(1) == 1);
 	TORCH_CHECK(occlusion.size(2) == height);
 	TORCH_CHECK(occlusion.size(3) == width);
 	TORCH_CHECK(occlusion.device() == image.device());
