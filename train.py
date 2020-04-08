@@ -34,6 +34,7 @@ parser.add_argument('--depth_scale', type=float, default=1.0)
 parser.add_argument('--rotation_scale', type=float, default=0.5)
 parser.add_argument('--translation_scale', type=float, default=2.0)
 parser.add_argument('--down_times', type=int, default=4)
+parser.add_argument('--occlusion', type=int, default=1)
 args = parser.parse_args()
 
 
@@ -44,19 +45,23 @@ def train():
     train_data = dataset.Data(args.data_root, mode='train', device=device)
     # val_data = dataset.Data(args, mode='val')
 
-    train_loader = DataLoader(train_data, batch_size=args.mini_batch_size, shuffle=False)
+    train_loader = DataLoader(train_data, batch_size=args.mini_batch_size, shuffle=True)
+
     # model = smp.Unet('resnet34', encoder_weights=None, activation='sigmoid')
     model = Model(args.encoder, rotation_scale=args.rotation_scale,
-                  translation_scale=args.translation_scale)
+                  translation_scale=args.translation_scale,
+                  depth_scale=args.depth_scale)
     model = model.to(device)
 
-    optimiser = torch.optim.SGD(model.parameters(), lr=args.lr)
+    # optimiser = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
+    optimiser = torch.optim.Adam(model.parameters(), lr=args.lr)
     writer = SummaryWriter()
     criteria = Criteria(
         smooth_weight=args.smooth_weight,
         ref_weight=args.ref_weight,
         depth_weight=args.depth_weight,
-        down_times=args.down_times
+        down_times=args.down_times,
+        occlusion=True if args.occlusion > 0 else False
     )
     pcd = o3d.geometry.PointCloud()
 
