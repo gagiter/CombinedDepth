@@ -1,6 +1,7 @@
 
 import torch
 import torch.nn.functional as F
+import function
 
 
 def grad(image):
@@ -10,7 +11,6 @@ def grad(image):
                             device=image.device).view(1, 1, 3, 3)
     grad_x = F.conv2d(image, filter_x, padding=1)
     grad_y = F.conv2d(image, filter_y, padding=1)
-
     return torch.cat([grad_x, grad_y], dim=1)
 
 
@@ -58,8 +58,7 @@ def near_grid(camera, shape, device):
 
 def unproject(depth, camera):
     grid = near_grid(camera, depth.shape[-2:], device=depth.device)
-    points = torch.cat([grid, torch.ones_like(depth)], dim=1)
-    points = points * depth
+    points = torch.cat([grid, torch.ones_like(depth), depth], dim=1)
     return points
 
 
@@ -67,9 +66,8 @@ def sample(image, uv, camera, depth):
     scope = camera_scope(camera, image.shape[-2:])
     uv = (uv - scope[..., 0:2, None, None]) / scope[..., 2:4, None, None]
     uv = 2.0 * uv - 1.0
-    uv = uv.permute(0, 2, 3, 1)
-    sampled = torch.nn.functional.grid_sample(
-        image, uv, mode='bilinear', align_corners=True)
+    sampled = function.WarpFuncion.apply(image, uv, depth)
+
     return sampled
 
 
@@ -80,11 +78,18 @@ def warp(image, depth, camera, motion):
     return warped
 
 
-def rotation_matrix(radians):
-    bank = radians[..., 0]
-    heading = radians[..., 1]
-    altitude = radians[..., 2]
-    #
+def transfrom_matrix(motion):
+
+    zeros = torch.zeros([motion.shape[0]], dtype=motion.dtype, device=motion.device)
+    ones = torch.ones([motion.shape[0]], dtype=motion.dtype, device=motion.device)
+
+    bank = motion[..., 0]
+    heading = motion[..., 1]
+    altitude = motion[..., 2]
+    tx = motion[..., 3]
+    ty = motion[..., 4]
+    tz = motion[..., 5]
+    
     sa = torch.sin(altitude)
     ca = torch.cos(altitude)
     sb = torch.sin(bank)
@@ -102,21 +107,20 @@ def rotation_matrix(radians):
     r21 = sh * sa * cb + ch * sb
     r22 = -sh * sa * sb + ch * cb
 
-    r0 = torch.stack([r00, r01, r02], dim=-1)
-    r1 = torch.stack([r10, r11, r12], dim=-1)
-    r2 = torch.stack([r20, r21, r22], dim=-1)
-    r = torch.stack([r0, r1, r2], dim=1)
+    m0 = torch.stack([r00, r01, r02, tx], dim=-1)
+    m1 = torch.stack([r10, r11, r12, ty], dim=-1)
+    m2 = torch.stack([r20, r21, r22, tz], dim=-1)
+    m3 = torch.stack([zeros, zeros, zeros, ones], dim=-1)
+    m = torch.stack([m0, m1, m2, m3], dim=1)
 
-    return r
+    return m
 
 
 def transform(motion, points):
-    rotation = rotation_matrix(motion[..., 0:3])
-    translation = motion[..., 3:6]
+    matrix = transfrom_matrix(motion)
     B, C, H, W = points.shape
     points = points.view([B, C, -1])
-    points = torch.bmm(rotation, points)
-    points += translation[..., None]
+    points = torch.bmm(matrix, points)
     points = points.view([B, C, H, W])
     return points
 

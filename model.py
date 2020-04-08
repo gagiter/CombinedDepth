@@ -10,7 +10,6 @@ class Vector(torch.nn.Module):
         last_channels = self.net.out_channels[-1]
         self.conv = torch.nn.Conv2d(last_channels, out_channels, kernel_size=3, padding=1)
 
-
     def forward(self, x):
         x = self.net(x)
         x = self.conv(x[-1])
@@ -32,7 +31,8 @@ class Model(torch.nn.Module):
         data_out = dict()
         image = data['image']
         # data_out['depth'] = -40.0 * torch.log(data_out['depth'])  # z = exp(-0.025 * d)
-        data_out['depth'] = self.depth_net(image) * 100.0  # z = d * 100.0
+        # data_out['depth'] = self.depth_net(image) * 100.0  # z = d * 100.0
+        data_out['depth'] = self.depth_net(image)  # z = 1.0 / d
         data_out['camera'] = self.camera_net(image) * 0.01
         data_out['camera'] = torch.zeros_like(data_out['camera'])
 

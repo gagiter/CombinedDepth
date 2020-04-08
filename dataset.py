@@ -2,10 +2,8 @@
 import os
 from torch.utils.data import Dataset
 from PIL import Image
-from torchvision.transforms import RandomCrop
 import torchvision.transforms.functional as TF
 import csv
-import torch
 
 
 class Data(Dataset):

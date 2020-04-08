@@ -124,13 +124,15 @@ __global__ void warp_forward_with_occlusion_cuda_kernel(
 	int iu = (int)floor(u);
 	int iv = (int)floor(v);
 
-	size_t idx_occ = batch_id * (1 * height * width) + 0 * (height * width) + row * width + col;
-	size_t idx_rec = batch_id * (1 * height * width) + 0 * (height * width) + iv * width + iu;
-
-	bool visible = occlusion[idx_occ] > record[idx_rec];
-	if (!visible) { return; }
 
 	if (iu >= 0 && iv >= 0 && iu < (width - 1) && iv < (height - 1)) {
+
+		size_t idx_occ = batch_id * (1 * height * width) + 0 * (height * width) + row * width + col;
+		size_t idx_rec = batch_id * (1 * height * width) + 0 * (height * width) + iv * width + iu;
+
+		bool visible = occlusion[idx_occ] > record[idx_rec];
+		if (!visible) { return; }
+
 		float uu = u - iu;
 		float vv = v - iv;
 		float w11 = (1.0 - uu) * (1.0 - vv);
@@ -180,13 +182,14 @@ __global__ void warp_backward_with_occlusion_cuda_kernel(
 	int iu = (int)floor(u);
 	int iv = (int)floor(v);
 
-	size_t idx_occ = batch_id * (1 * height * width) + 0 * (height * width) + row * width + col;
-	size_t idx_rec = batch_id * (1 * height * width) + 0 * (height * width) + iv * width + iu;
-
-	bool visible = occlusion[idx_occ] > record[idx_rec];
-	if (!visible) { return; }
-
 	if (iu >= 0 && iv >= 0 && iu < (width - 1) && iv < (height - 1)) {
+
+		size_t idx_occ = batch_id * (1 * height * width) + 0 * (height * width) + row * width + col;
+		size_t idx_rec = batch_id * (1 * height * width) + 0 * (height * width) + iv * width + iu;
+
+		bool visible = occlusion[idx_occ] > record[idx_rec];
+		if (!visible) { return; }
+
 		float uu = u - iu;
 		float vv = v - iv;
 

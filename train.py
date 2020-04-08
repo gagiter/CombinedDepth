@@ -32,6 +32,7 @@ parser.add_argument('--ref_weight', type=float, default=1.0)
 parser.add_argument('--depth_weight', type=float, default=1.0)
 parser.add_argument('--rotation_scale', type=float, default=0.5)
 parser.add_argument('--translation_scale', type=float, default=2.0)
+parser.add_argument('--down_times', type=int, default=4)
 args = parser.parse_args()
 
 
@@ -53,7 +54,8 @@ def train():
     criteria = Criteria(
         smooth_weight=args.smooth_weight,
         ref_weight=args.ref_weight,
-        depth_weight=args.depth_weight
+        depth_weight=args.depth_weight,
+        down_times=args.down_times
     )
     pcd = o3d.geometry.PointCloud()
 
@@ -105,6 +107,7 @@ def train():
 
             points = util.unproject(data_out['depth'], data_out['camera'])
             points = points[0].data.cpu().numpy()
+            points = points[:3, ...] / points[3, ...]
             points = points.transpose(1, 2, 0).reshape(-1, 3)
             pcd.points = o3d.utility.Vector3dVector(points)
             o3d.io.write_point_cloud(os.path.join(save_dir, 'points.ply'), pcd)
