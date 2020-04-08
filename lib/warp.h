@@ -8,8 +8,9 @@
 #endif
 
 torch::Tensor warp_forward(torch::Tensor image, torch::Tensor grid);
-torch::Tensor warp_backward(torch::Tensor image, torch::Tensor grid);
+torch::Tensor warp_backward(torch::Tensor image, torch::Tensor grid, torch::Tensor grad);
 torch::Tensor warp_forward_cuda(torch::Tensor image, torch::Tensor grid);
+torch::Tensor warp_backward_cuda(torch::Tensor image, torch::Tensor grid, torch::Tensor grad);
 
 #ifndef _DEBUG
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
