@@ -71,10 +71,10 @@ def sample(image, uv, camera, depth):
     return sampled
 
 
-def warp(image, depth, camera, motion):
+def warp(image, depth, camera, motion, occlusion=True):
     points = unproject(depth, camera)
     uv = project(points, camera, motion)
-    warped = sample(image, uv, camera, depth)
+    warped = sample(image, uv, camera, depth if occlusion else None)
     return warped
 
 
