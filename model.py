@@ -34,10 +34,10 @@ class Model(torch.nn.Module):
         # data_out['depth'] = -40.0 * torch.log(data_out['depth'])  # z = exp(-0.025 * d)
         # data_out['depth'] = self.depth_net(image) * 100.0  # z = d * 100.0
         data_out['depth'] = self.depth_net(image)  # z = 1.0 / d
-        # if self.depth_scale > 0.0:
-        #     data_out['depth'] *= self.depth_scale
-        # else:
-        #     data_out['depth'] = torch.ones_like(data_out['depth'])
+        if self.depth_scale > 0.0:
+            data_out['depth'] = data_out['depth'] * self.depth_scale
+        else:
+            data_out['depth'] = torch.ones_like(data_out['depth'])
         data_out['camera'] = self.camera_net(image) * 0.01
         data_out['camera'] = torch.zeros_like(data_out['camera'])
 
