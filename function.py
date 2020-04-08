@@ -4,17 +4,16 @@ import libwarp
 from torch.utils.tensorboard import SummaryWriter
 
 
-class warper(torch.autograd.Function):
+class WarpFuncion(torch.autograd.Function):
     @staticmethod
     def forward(ctx, image, sample, occlusion=None):
         if occlusion is None:
             warped = libwarp.forward(image, sample)
             ctx.save_for_backward(image, sample, occlusion)
-            return warped
         else:
-            warped = libwarp.forward_width_occlusion(image, sample)
+            warped = libwarp.forward_with_occlusion(image, sample, occlusion)
             ctx.save_for_backward(image, sample, occlusion)
-            return warped
+        return warped
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -22,16 +21,17 @@ class warper(torch.autograd.Function):
         grad_image = grad_sample = grad_occlusion = None
         if occlusion is None and ctx.needs_input_grad[1]:
             grad_sample = libwarp.backward(image, sample, grad_output)
+        else:
+            grad_sample = libwarp.backward_with_occlusion(image, sample, occlusion, grad_output)
 
         return grad_image, grad_sample, grad_occlusion
 
 
 if __name__ == '__main__':
 
-    writer = SummaryWriter()
-
     image = torch.zeros([2, 3, 128, 256], dtype=torch.float32, device='cuda:0')
     ref = torch.zeros([2, 3, 128, 256], dtype=torch.float32, device='cuda:0')
+    occlusion = torch.rand([2, 1, 128, 256], dtype=torch.float32, device='cuda:0')
 
     image[:, :, 30:80, 100:150] = 1.0
     ref[:, :, 20:70, 120:170] = 1.0
@@ -45,10 +45,11 @@ if __name__ == '__main__':
     grid = grid.repeat([2, 1, 1, 1])
     grid = grid.to('cuda:0')
 
-    warp_0 = warper.apply(ref, grid)
+    warp_0 = WarpFuncion.apply(ref, grid, occlusion)
     residual_ref = (image - ref).abs()
     grid_v = torch.cat([grid * 0.5 + 0.5, torch.ones([2, 1, 128, 256], device='cuda:0')], dim=1)
 
+    writer = SummaryWriter()
     writer.add_images('image/image', image, 0)
     writer.add_images('image/ref', ref, 0)
     writer.add_images('image/warp_0', warp_0, 0)
@@ -62,7 +63,7 @@ if __name__ == '__main__':
 
     for i in range(200):
         sample = grid + move
-        warp = warper.apply(ref, sample)
+        warp = WarpFuncion.apply(ref, sample, occlusion)
         residual_warp = (image - warp).abs()
         loss = residual_warp.mean()
         optimizer.zero_grad()
