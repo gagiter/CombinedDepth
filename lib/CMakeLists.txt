@@ -13,9 +13,9 @@ include_directories(${TORCH_INCLUDE_DIRS})
 #cuda_add_executable(${PROJECT_NAME}
 cuda_add_executable(${PROJECT_NAME}
     warp.h
-    warp.cpp
     warp.cu
 )
+# warp.cpp
 
 target_link_libraries(${PROJECT_NAME}
 	${TORCH_LIBRARIES}
