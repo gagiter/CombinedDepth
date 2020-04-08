@@ -30,6 +30,7 @@ parser.add_argument('--save_freq', type=int, default=100)
 parser.add_argument('--smooth_weight', type=float, default=0.1)
 parser.add_argument('--ref_weight', type=float, default=1.0)
 parser.add_argument('--depth_weight', type=float, default=1.0)
+parser.add_argument('--depth_scale', type=float, default=1.0)
 parser.add_argument('--rotation_scale', type=float, default=0.5)
 parser.add_argument('--translation_scale', type=float, default=2.0)
 parser.add_argument('--down_times', type=int, default=4)
@@ -82,15 +83,13 @@ def train():
         if epoch % args.summary_freq == 0:
             loss = sum(train_losses) / len(train_losses)
             print(epoch, loss)
-            util.visualize(data_in)
-            util.visualize(data_out)
             if 'abs_rel' in data_out:
                 writer.add_scalar('eval/abs_rel', data_out['abs_rel'], global_step=epoch)
             writer.add_scalar('loss', loss, global_step=epoch)
             writer.add_image('image/image', data_in['image'][0], global_step=epoch)
             # writer.add_image('image/mask', data_in['mask'][0], global_step=epoch)
-            writer.add_image('image/depth_in', data_in['depth_v'][0], global_step=epoch)
-            writer.add_image('image/depth_out', data_out['depth_v'][0], global_step=epoch)
+            writer.add_image('image/depth_in', data_in['depth'][0] / 80.0, global_step=epoch)
+            writer.add_image('image/depth_out', data_out['depth'][0], global_step=epoch)
             for key in data_out:
                 if 'residual' in key:
                     writer.add_image('residual/' + key, data_out[key][0], global_step=epoch)

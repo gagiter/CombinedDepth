@@ -14,6 +14,7 @@ class Criteria(torch.nn.Module):
     def forward(self, data_in, data_out):
         loss = 0.0
         if self.smooth_weight > 0.0:
+            depth_out = data_out['depth']
             depth_grad = util.grad(depth_out)
             data_out['residual_grad'] = depth_grad.abs().mean(dim=1, keepdim=True)
             data_out['loss_smooth'] = data_out['residual_grad'].mean() * self.smooth_weight
@@ -52,7 +53,7 @@ class Criteria(torch.nn.Module):
                     depth_out_down = torch.nn.functional.interpolate(
                         depth_out, size=(height, width), mode='bilinear', align_corners=True)
                     warp = util.warp(image_ref_down, depth_out_down, camera, motion)
-                    residual = (image - warp).abs()
+                    residual = (image_down - warp).abs()
                     data_out['residual_%s_%d' % (ref, i)] = residual
                     loss_ref += residual.mean()
                     height >>= 1

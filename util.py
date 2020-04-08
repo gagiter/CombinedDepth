@@ -137,7 +137,7 @@ def distort(uv, coefficients):
 def project(points, camera, motion):
     points = transform(motion, points)
     uv = points[:, 0:2, ...]
-    uv = uv / points[:, 2, ...]
+    uv = uv / points[:, 2:3, ...]
     uv = distort(uv, camera[..., 4:6])
     return uv
 
