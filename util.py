@@ -4,19 +4,17 @@ import torch.nn.functional as F
 import function
 
 
-def planar(normal, depth, camera):
+def planar_project(normal, depth, camera):
     points = unproject(depth, camera)
     points = points[:, 0:3, ...] / (points[:, 3:4, ...] + 0.00001)
     distance = (points * normal).sum(dim=1, keepdim=True)
-    laplace = laplace_filter(distance)
-    laplace = laplace * depth
-    return laplace
+    return distance
 
 
 def laplace_filter(image):
-    channles = groups = image.shape[1]
-    kernel = torch.tensor([[0.0, -0.25, 0.0], [-0.25, 1.0, -0.25], [0.0, -0.25, 0.0]],
-                            device=image.device).view(1, 1, 3, 3)
+    channles = image.shape[1]
+    kernel = torch.Tensor([[0.0, -0.25, 0.0], [-0.25, 1.0, -0.25], [0.0, -0.25, 0.0]],
+                          device=image.device).view(1, 1, 3, 3)
 
     kernel = kernel.repeat(channles, 1, 1, 1)
     laplace = F.conv2d(image, kernel, padding=1, groups=channles)
@@ -25,10 +23,10 @@ def laplace_filter(image):
 
 
 def grad(image):
-    channles = groups = image.shape[1]
-    filter_x = torch.tensor([[-0.25, 0.0, 0.25], [-0.5, 0.0, 0.5], [-0.25, 0.0, 0.25]],
+    channles = image.shape[1]
+    filter_x = torch.Tensor([[-0.25, 0.0, 0.25], [-0.5, 0.0, 0.5], [-0.25, 0.0, 0.25]],
                             device=image.device).view(1, 1, 3, 3)
-    filter_y = torch.tensor([[-0.25, -0.5, -0.25], [0.0, 0.0, 0.0], [0.25, 0.5, 0.25]],
+    filter_y = torch.Tensor([[-0.25, -0.5, -0.25], [0.0, 0.0, 0.0], [0.25, 0.5, 0.25]],
                             device=image.device).view(1, 1, 3, 3)
     filter_x = filter_x.repeat(channles, 1, 1, 1)
     filter_y = filter_y.repeat(channles, 1, 1, 1)
@@ -46,12 +44,12 @@ def visualize(data):
 
 
 def camera_scope(camera, shape):
-    half_fov_y = 0.42 + camera[:, 0]  # mean half_fov_y = 0.42 rad about 25 deg
-    half_fov_x = half_fov_y * (1.0 + camera[:, 1]) * (shape[1] / shape[0])
+    half_fov_y = 0.25 + camera[:, 0]  # mean half_fov_y = 0.42 rad about 25 deg
     center_x = camera[:, 2]
     center_y = camera[:, 3]
-    half_width = torch.tan(half_fov_x)
     half_height = torch.tan(half_fov_y)
+    half_width = half_height * (1.0 + camera[:, 1]) * (shape[1] / shape[0])
+
     left = center_x - half_width
     top = center_y - half_height
     width = half_width * 2.0
