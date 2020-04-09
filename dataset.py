@@ -41,27 +41,22 @@ class Data(Dataset):
 
         out = dict()
         image = Image.open(image)
-        # image = TF.resize(image, 256, interpolation=)
         image = TF.center_crop(image, (256, 512))
         image = TF.to_tensor(image)
         out['image'] = image
 
         if depth:
             depth = Image.open(depth)
-            # depth = TF.resize(depth, 256)
             depth = TF.center_crop(depth, (256, 512))
             depth = TF.to_tensor(depth).float()
             depth /= 256.0
-            # mask = depth > 0.0
-            # mask &= depth < 1.0
-            # depth *= mask
+            mask = depth > 0.00001
+            depth[mask] = 1.0 / depth[mask]
             out['depth'] = depth
-            # out['mask'] = mask
 
         for ref_key in ref:
             if ref[ref_key] is not None:
                 ref[ref_key] = Image.open(ref[ref_key])
-                # stereo = TF.resize(stereo, 256)
                 ref[ref_key] = TF.center_crop(ref[ref_key], (256, 512))
                 ref[ref_key] = TF.to_tensor(ref[ref_key])
                 out[ref_key] = ref[ref_key]
