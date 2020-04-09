@@ -19,25 +19,24 @@ class Criteria(torch.nn.Module):
             camera = data_out['camera']
             normal = data_out['normal']
             depth_out = data_out['depth']
-            planar = util.planar(normal, depth_out, camera)
-            data_out['residual_planar'] = planar.abs()
+            planar_project = util.planar_project(normal, depth_out, camera)
+            residual_planar = util.laplace_filter(planar_project)
+            data_out['residual_planar_project'] = 1.0 / (planar_project.abs() + 0.00001)
+            data_out['residual_planar'] = residual_planar.abs()
             data_out['loss_smooth'] = data_out['residual_planar'].mean() * self.smooth_weight
             loss += data_out['loss_smooth']
 
         if 'depth' in data_in:
             depth_in = data_in['depth']
             depth_out = data_out['depth']
-            mask = depth_in > 0.1
-            mask &= depth_in < 80.0
-            depth_out = 1.0 / depth_out
-            residual = depth_in - depth_out
-            residual[mask] /= depth_in[mask]
-            residual *= mask
-            data_out['abs_rel'] = residual.abs().sum() / mask.sum()
-            if self.depth_weight > 0.0:
-                data_out['residual_depth'] = residual
-                data_out['loss_depth'] = data_out['abs_rel'] * self.depth_weight
-                loss += data_out['loss_depth']
+            mask = depth_in > 0.00001
+            residual_depth = torch.zeros_like(depth_in)
+            residual_depth[mask] = depth_in[mask] - depth_out[mask]
+            data_out['residual_depth'] = residual_depth.abs()
+            abs_rel = 1.0 - (depth_in[mask]/depth_out[mask])
+            data_out['abs_rel'] = abs_rel.abs().mean()
+            data_out['loss_depth'] = data_out['abs_rel'] * self.depth_weight
+            loss += data_out['loss_depth']
 
         for ref in ['stereo', 'previous', 'next']:
             if ref in data_in and self.ref_weight > 0.0:
