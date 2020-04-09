@@ -16,10 +16,12 @@ class Criteria(torch.nn.Module):
     def forward(self, data_in, data_out):
         loss = 0.0
         if self.smooth_weight > 0.0:
+            camera = data_out['camera']
+            normal = data_out['normal']
             depth_out = data_out['depth']
-            depth_grad = util.grad(depth_out)
-            data_out['residual_grad'] = depth_grad.abs().mean(dim=1, keepdim=True)
-            data_out['loss_smooth'] = data_out['residual_grad'].mean() * self.smooth_weight
+            planar = util.planar(normal, depth_out, camera)
+            data_out['residual_planar'] = planar.abs()
+            data_out['loss_smooth'] = data_out['residual_planar'].mean() * self.smooth_weight
             loss += data_out['loss_smooth']
 
         if 'depth' in data_in:

@@ -92,8 +92,8 @@ def train():
                 writer.add_scalar('eval/abs_rel', data_out['abs_rel'], global_step=epoch)
             writer.add_scalar('loss', loss, global_step=epoch)
             writer.add_image('image/image', data_in['image'][0], global_step=epoch)
-            # writer.add_image('image/mask', data_in['mask'][0], global_step=epoch)
             writer.add_image('image/depth_in', data_in['depth'][0] / 80.0, global_step=epoch)
+            writer.add_image('image/normal', data_out['normal'][0], global_step=epoch)
             writer.add_image('image/depth_out', data_out['depth'][0], global_step=epoch)
             for key in data_out:
                 if 'residual' in key:

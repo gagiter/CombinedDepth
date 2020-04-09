@@ -35,9 +35,9 @@ class Data(Dataset):
         image = os.path.join(root, item['image'])
         depth = None if item['depth'] == 'None' else os.path.join(root, item['depth'])
         ref = dict()
-        for ref_key in ['stereo']:  # , 'previous' ['stereo', 'previous', 'next']:
-            ref[ref_key] = None if item[ref_key] == 'None' \
-                else os.path.join(root, item[ref_key])
+        for ref_name in ['stereo']:  # , 'previous' ['stereo', 'previous', 'next']:
+            ref[ref_name] = None if item[ref_name] == 'None' \
+                else os.path.join(root, item[ref_name])
 
         out = dict()
         image = Image.open(image)

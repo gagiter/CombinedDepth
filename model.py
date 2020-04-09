@@ -18,10 +18,22 @@ class Vector(torch.nn.Module):
         return x
 
 
+class Matrix(torch.nn.Module):
+    def __init__(self, name='resnet34', in_channels=3, out_channels=3):
+        super(Matrix, self).__init__()
+        self.net = smp.Unet(
+            name, encoder_weights=None, in_channels=in_channels,
+            classes=out_channels, activation='sigmoid')
+
+    def forward(self, x):
+        x = self.net(x)
+        return x
+
+
 class Model(torch.nn.Module):
     def __init__(self, encoder='resnet34', depth_scale=1.0, rotation_scale=1.0, translation_scale=1.0):
         super(Model, self).__init__()
-        self.depth_net = smp.Unet(encoder, encoder_weights=None, activation='sigmoid')
+        self.plane_net = Matrix(encoder, in_channels=3, out_channels=4)
         self.camera_net = Vector(encoder, in_channels=3, out_channels=6)
         self.motion_net = Vector(encoder, in_channels=6, out_channels=6)
         self.depth_scale = depth_scale
@@ -31,13 +43,10 @@ class Model(torch.nn.Module):
     def forward(self, data):
         data_out = dict()
         image = data['image']
-        # data_out['depth'] = -40.0 * torch.log(data_out['depth'])  # z = exp(-0.025 * d)
-        # data_out['depth'] = self.depth_net(image) * 100.0  # z = d * 100.0
-        data_out['depth'] = self.depth_net(image)  # z = 1.0 / d
-        if self.depth_scale > 0.0:
-            data_out['depth'] = data_out['depth'] * self.depth_scale
-        else:
-            data_out['depth'] = torch.ones_like(data_out['depth'])
+        plane = self.plane_net(image)
+        data_out['normal'] = plane[:, 0:3, ...] - 0.5
+        data_out['normal'] = torch.nn.functional.normalize(data_out['normal'])
+        data_out['depth'] = plane[:, 3:4, ...]
         data_out['camera'] = self.camera_net(image) * 0.01
         data_out['camera'] = torch.zeros_like(data_out['camera'])
 

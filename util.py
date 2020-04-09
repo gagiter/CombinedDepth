@@ -4,14 +4,37 @@ import torch.nn.functional as F
 import function
 
 
+def planar(normal, depth, camera):
+    points = unproject(depth, camera)
+    points = points[:, 0:3, ...] / (points[:, 3:4, ...] + 0.00001)
+    distance = (points * normal).sum(dim=1, keepdim=True)
+    laplace = laplace_filter(distance)
+    laplace = laplace * depth
+    return laplace
+
+
+def laplace_filter(image):
+    channles = groups = image.shape[1]
+    kernel = torch.tensor([[0.0, -0.25, 0.0], [-0.25, 1.0, -0.25], [0.0, -0.25, 0.0]],
+                            device=image.device).view(1, 1, 3, 3)
+
+    kernel = kernel.repeat(channles, 1, 1, 1)
+    laplace = F.conv2d(image, kernel, padding=1, groups=channles)
+    return laplace
+
+
+
 def grad(image):
+    channles = groups = image.shape[1]
     filter_x = torch.tensor([[-0.25, 0.0, 0.25], [-0.5, 0.0, 0.5], [-0.25, 0.0, 0.25]],
                             device=image.device).view(1, 1, 3, 3)
     filter_y = torch.tensor([[-0.25, -0.5, -0.25], [0.0, 0.0, 0.0], [0.25, 0.5, 0.25]],
                             device=image.device).view(1, 1, 3, 3)
-    grad_x = F.conv2d(image, filter_x, padding=1)
-    grad_y = F.conv2d(image, filter_y, padding=1)
-    return torch.cat([grad_x, grad_y], dim=1)
+    filter_x = filter_x.repeat(channles, 1, 1, 1)
+    filter_y = filter_y.repeat(channles, 1, 1, 1)
+    grad_x = F.conv2d(image, filter_x, padding=1, groups=channles)
+    grad_y = F.conv2d(image, filter_y, padding=1, groups=channles)
+    return grad_x, grad_y
 
 
 def visualize(data):
