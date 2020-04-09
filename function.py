@@ -8,10 +8,11 @@ class WarpFuncion(torch.autograd.Function):
     @staticmethod
     def forward(ctx, image, sample, occlusion=None):
         if occlusion is None:
-            warped = libwarp.forward(image, sample)
+            warped = libwarp.forward(image.contiguous(), sample.contiguous())
             ctx.save_for_backward(image, sample, occlusion)
         else:
-            warped = libwarp.forward_with_occlusion(image, sample, occlusion)
+            warped = libwarp.forward_with_occlusion(
+                image.contiguous(), sample.contiguous(), occlusion.contiguous())
             ctx.save_for_backward(image, sample, occlusion)
         return warped
 
@@ -20,9 +21,10 @@ class WarpFuncion(torch.autograd.Function):
         image, sample, occlusion = ctx.saved_tensors
         grad_image = grad_sample = grad_occlusion = None
         if occlusion is None and ctx.needs_input_grad[1]:
-            grad_sample = libwarp.backward(image, sample, grad_output)
+            grad_sample = libwarp.backward(image.contiguous(), sample.contiguous(), grad_output.contiguous())
         else:
-            grad_sample = libwarp.backward_with_occlusion(image, sample, occlusion, grad_output)
+            grad_sample = libwarp.backward_with_occlusion(
+                image.contiguous(), sample.contiguous(), occlusion.contiguous(), grad_output.contiguous())
 
         return grad_image, grad_sample, grad_occlusion
 
