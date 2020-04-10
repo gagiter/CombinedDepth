@@ -33,7 +33,7 @@ class Matrix(torch.nn.Module):
 class Model(torch.nn.Module):
     def __init__(self, encoder='resnet34', depth_scale=1.0, rotation_scale=1.0, translation_scale=1.0):
         super(Model, self).__init__()
-        self.plane_net = Matrix(encoder, in_channels=3, out_channels=4)
+        self.depth_net = Matrix(encoder, in_channels=3, out_channels=1)
         self.camera_net = Vector(encoder, in_channels=3, out_channels=6)
         self.motion_net = Vector(encoder, in_channels=6, out_channels=6)
         self.depth_scale = depth_scale
@@ -43,10 +43,7 @@ class Model(torch.nn.Module):
     def forward(self, data):
         data_out = dict()
         image = data['image']
-        plane = self.plane_net(image)
-        data_out['normal'] = plane[:, 0:3, ...] - 0.5
-        data_out['normal'] = torch.nn.functional.normalize(data_out['normal'])
-        data_out['depth'] = plane[:, 3:4, ...]
+        data_out['depth'] = self.depth_net(image)
         data_out['camera'] = self.camera_net(image) * 0.01
         data_out['camera'] = torch.zeros_like(data_out['camera'])
 
