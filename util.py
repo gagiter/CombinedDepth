@@ -8,9 +8,9 @@ def normal(depth, camera):
     points = unproject(depth, camera)
     points = points[:, 0:3, ...] / (points[:, 3:4, ...] + 0.00001)
     grad_x, grad_y = grad(points)
-    normal = cross(grad_x, grad_y)
-    normal = torch.nn.functional.normalize(normal)
-    return normal, points
+    normals = cross(grad_x, grad_y)
+    normals = torch.nn.functional.normalize(normals)
+    return normals, points
 
 
 def cross(a, b):

@@ -4,10 +4,11 @@ import util
 
 
 class Criteria(torch.nn.Module):
-    def __init__(self, smooth_weight=1.0, ref_weight=1.0, depth_weight=1.0,
-                 down_times=4, occlusion=True):
+    def __init__(self, depth_weight=1.0, normal_weight=1.0,
+                 plane_weight=1.0, ref_weight=1.0, down_times=4, occlusion=True):
         super(Criteria, self).__init__()
-        self.smooth_weight = smooth_weight
+        self.normal_weight = normal_weight
+        self.plane_weight = plane_weight
         self.ref_weight = ref_weight
         self.depth_weight = depth_weight
         self.down_times = down_times
@@ -18,25 +19,44 @@ class Criteria(torch.nn.Module):
         image = data_in['image']
         image_grad = torch.cat(util.grad(image), dim=1)
         data_out['image_grad'] = image_grad.abs().mean(dim=1, keepdims=True)
-        if self.smooth_weight > 0.0:
-            camera = data_out['camera']
-            depth_out = data_out['depth']
-            loss_smooth = 0.0
+        camera = data_out['camera']
+        depth_out = data_out['depth']
+        normals, points = util.normal(depth_out, camera)
+        data_out['normals'] = normals
+        data_out['points'] = points
+
+        if self.normal_weight > 0.0:
+            loss_normal = 0.0
             height, width = depth_out.shape[-2:]
             for i in range(self.down_times):
-                depth_out_down = torch.nn.functional.interpolate(
+                depth_down = torch.nn.functional.interpolate(
                         depth_out, size=(height, width), mode='bilinear', align_corners=True)
-                normal, points = util.normal(depth_out_down, camera)
-                plane_project = (points * normal).sum(dim=1, keepdims=True)
-                residual_planar = torch.cat(util.grad(plane_project), dim=1)
-                data_out['residual_normal_%d' % i] = normal
-                data_out['residual_plane_project_%d' % i] = plane_project.abs()
-                data_out['residual_planar_%d' % i] = residual_planar.abs().mean(dim=1, keepdims=True)
-                loss_smooth += data_out['residual_planar_%d' % i].mean()
+                normals, _ = util.normal(depth_down, camera)
+                normals_grad = torch.cat(util.grad(normals), dim=1)
+                data_out['residual_normals_%d' % i] = normals * 0.5 + 0.5
+                data_out['residual_normals_grad_%d' % i] = normals_grad.abs().mean(dim=1, keepdims=True)
+                loss_normal += data_out['residual_normals_grad_%d' % i].mean()
                 height >>= 1
                 width >>= 1
-            data_out['loss_smooth'] = loss_smooth / self.down_times * self.smooth_weight
-            loss += data_out['loss_smooth']
+            data_out['loss_normal'] = loss_normal / self.down_times * self.normal_weight
+            loss += data_out['loss_normal']
+
+        if self.plane_weight > 0.0:
+            loss_plane = 0.0
+            height, width = depth_out.shape[-2:]
+            for i in range(self.down_times):
+                depth_down = torch.nn.functional.interpolate(
+                        depth_out, size=(height, width), mode='bilinear', align_corners=True)
+                normals, points = util.normal(depth_down, camera)
+                plane = (points * normals).sum(dim=1, keepdims=True)
+                plane_grad = torch.cat(util.grad(plane), dim=1)
+                data_out['residual_plane_%d' % i] = plane.abs()
+                data_out['residual_plane_grad_%d' % i] = plane_grad.abs().mean(dim=1, keepdims=True)
+                loss_plane += data_out['residual_plane_grad_%d' % i].mean()
+                height >>= 1
+                width >>= 1
+            data_out['loss_plane'] = loss_plane / self.down_times * self.plane_weight
+            loss += data_out['loss_plane']
 
         if 'depth' in data_in:
             depth_in = data_in['depth']

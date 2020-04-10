@@ -27,7 +27,8 @@ parser.add_argument('--epoch_start', type=int, default=0)
 parser.add_argument('--epoch_num', type=int, default=50000)
 parser.add_argument('--summary_freq', type=int, default=100)
 parser.add_argument('--save_freq', type=int, default=100)
-parser.add_argument('--smooth_weight', type=float, default=0.1)
+parser.add_argument('--plane_weight', type=float, default=1.0)
+parser.add_argument('--normal_weight', type=float, default=1.0)
 parser.add_argument('--ref_weight', type=float, default=1.0)
 parser.add_argument('--depth_weight', type=float, default=1.0)
 parser.add_argument('--depth_scale', type=float, default=1.0)
@@ -55,9 +56,10 @@ def train():
     optimiser = torch.optim.Adam(model.parameters(), lr=args.lr)
     writer = SummaryWriter()
     criteria = Criteria(
-        smooth_weight=args.smooth_weight,
-        ref_weight=args.ref_weight,
         depth_weight=args.depth_weight,
+        normal_weight=args.normal_weight,
+        plane_weight=args.plane_weight,
+        ref_weight=args.ref_weight,
         down_times=args.down_times,
         occlusion=True if args.occlusion > 0 else False
     )
@@ -89,8 +91,8 @@ def train():
                 writer.add_scalar('eval/abs_rel', data_out['abs_rel'], global_step=epoch)
             writer.add_scalar('loss', loss, global_step=epoch)
             writer.add_image('image/image', data_in['image'][0], global_step=epoch)
-            writer.add_image('image/depth_in', data_in['depth'][0] * 5.0, global_step=epoch)
-            writer.add_image('image/depth_out', data_out['depth'][0] * 5.0, global_step=epoch)
+            writer.add_image('image/depth_in', data_in['depth'][0] * 1.0, global_step=epoch)
+            writer.add_image('image/depth_out', data_out['depth'][0] * 1.0, global_step=epoch)
             writer.add_image('image/image_grad', data_out['image_grad'][0], global_step=epoch)
             for key in data_out:
                 if 'residual' in key:
@@ -106,11 +108,15 @@ def train():
             torch.save(optimiser.state_dict(), os.path.join(save_dir, 'optimiser.pth'))
             torch.save({'epoch': epoch}, os.path.join(save_dir, 'epoch.pth'))
 
-            points = util.unproject(data_out['depth'], data_out['camera'])
-            points = points[0].data.cpu().numpy()
-            points = points[:3, ...] / points[3, ...]
+            points = data_out['points'][0].data.cpu().numpy()
             points = points.transpose(1, 2, 0).reshape(-1, 3)
             pcd.points = o3d.utility.Vector3dVector(points)
+            colors = data_in['image'][0].data.cpu().numpy()
+            colors = colors.transpose(1, 2, 0).reshape(-1, 3)
+            pcd.colors = o3d.utility.Vector3dVector(colors)
+            normals = data_out['normals'][0].data.cpu().numpy()
+            normals = normals.transpose(1, 2, 0).reshape(-1, 3)
+            pcd.normals = o3d.utility.Vector3dVector(normals)
             o3d.io.write_point_cloud(os.path.join(save_dir, 'points.ply'), pcd)
 
     writer.close()
