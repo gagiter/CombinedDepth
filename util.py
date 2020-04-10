@@ -4,6 +4,23 @@ import torch.nn.functional as F
 import function
 
 
+def normal(depth, camera):
+    points = unproject(depth, camera)
+    points = points[:, 0:3, ...] / (points[:, 3:4, ...] + 0.00001)
+    grad_x, grad_y = grad(points)
+    normal = cross(grad_x, grad_y)
+    normal = torch.nn.functional.normalize(normal)
+    return normal, points
+
+
+def cross(a, b):
+    c = torch.zeros_like(a)
+    c[:, 0, ...] = a[:, 1, ...] * b[:, 2, ...] - a[:, 2, ...] * b[:, 1, ...]
+    c[:, 1, ...] = a[:, 2, ...] * b[:, 0, ...] - a[:, 0, ...] * b[:, 2, ...]
+    c[:, 2, ...] = a[:, 0, ...] * b[:, 1, ...] - a[:, 1, ...] * b[:, 0, ...]
+    return c
+
+
 def planar_project(normal, depth, camera):
     points = unproject(depth, camera)
     points = points[:, 0:3, ...] / (points[:, 3:4, ...] + 0.00001)
@@ -11,18 +28,26 @@ def planar_project(normal, depth, camera):
     return distance
 
 
-def laplace_filter(image):
+def laplace(image):
     channles = image.shape[1]
-    kernel = torch.Tensor([[0.0, -0.25, 0.0], [-0.25, 1.0, -0.25], [0.0, -0.25, 0.0]],
-                          device=image.device).view(1, 1, 3, 3)
-
+    torch.Tensor()
+    kernel = torch.Tensor([[0.0, -0.25, 0.0], [-0.25, 1.0, -0.25], [0.0, -0.25, 0.0]]
+                          ).to(image.device).view(1, 1, 3, 3)
     kernel = kernel.repeat(channles, 1, 1, 1)
-    laplace = F.conv2d(image, kernel, padding=1, groups=channles)
-    return laplace
-
+    lap = F.conv2d(image, kernel, padding=1, groups=channles)
+    return lap
 
 
 def grad(image):
+    height, width = image.shape[-2:]
+    grad_x = torch.zeros_like(image)
+    grad_y = torch.zeros_like(image)
+    grad_x[:, :, :, :width-1] = image[:, :, :, 1:] - image[:, :, :, :width-1]
+    grad_y[:, :, :height-1, :] = image[:, :, 1:, :] - image[:, :, :height-1, :]
+    return grad_x, grad_y
+
+
+def sobel(image):
     channles = image.shape[1]
     filter_x = torch.Tensor([[-0.25, 0.0, 0.25], [-0.5, 0.0, 0.5], [-0.25, 0.0, 0.25]],
                             device=image.device).view(1, 1, 3, 3)
