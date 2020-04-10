@@ -31,12 +31,12 @@ class WarpFuncion(torch.autograd.Function):
 
 if __name__ == '__main__':
 
-    image = torch.zeros([2, 3, 128, 256], dtype=torch.float32, device='cuda:0')
-    ref = torch.zeros([2, 3, 128, 256], dtype=torch.float32, device='cuda:0')
+    image = torch.ones([2, 3, 128, 256], dtype=torch.float32, device='cuda:0')
+    ref = torch.ones([2, 3, 128, 256], dtype=torch.float32, device='cuda:0')
     occlusion = torch.rand([2, 1, 128, 256], dtype=torch.float32, device='cuda:0')
 
-    image[:, :, 30:80, 100:150] = 1.0
-    ref[:, :, 20:70, 120:170] = 1.0
+    image[:, :, 30:80, 100:150] = 0.0
+    ref[:, :, 20:70, 120:170] = 0.0
 
     grid_x = torch.linspace(-1.0, 1.0, 256)
     grid_y = torch.linspace(-1.0, 1.0, 128)
