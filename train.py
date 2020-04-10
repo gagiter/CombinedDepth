@@ -36,12 +36,12 @@ parser.add_argument('--translation_scale', type=float, default=2.0)
 parser.add_argument('--down_times', type=int, default=4)
 parser.add_argument('--occlusion', type=int, default=1)
 args = parser.parse_args()
-# os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
+os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
 
 
 def train():
     use_cuda = torch.cuda.is_available() and not args.no_cuda
-    device = torch.device('cuda:' + args.gpu_id if use_cuda else 'cpu')
+    device = torch.device('cuda' if use_cuda else 'cpu')
 
     train_data = dataset.Data(args.data_root, mode='train', device=device)
     # val_data = dataset.Data(args, mode='val')
@@ -90,8 +90,8 @@ def train():
             writer.add_scalar('loss', loss, global_step=epoch)
             writer.add_image('image/image', data_in['image'][0], global_step=epoch)
             writer.add_image('image/depth_in', data_in['depth'][0] * 5.0, global_step=epoch)
-            writer.add_image('image/normal', data_out['normal'][0], global_step=epoch)
             writer.add_image('image/depth_out', data_out['depth'][0] * 5.0, global_step=epoch)
+            writer.add_image('image/image_grad', data_out['image_grad'][0], global_step=epoch)
             for key in data_out:
                 if 'residual' in key:
                     writer.add_image('residual/' + key, data_out[key][0], global_step=epoch)
