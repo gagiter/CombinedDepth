@@ -172,8 +172,8 @@ def transform(motion, points):
 
 
 def distort(uv, coefficients):
-    k1 = coefficients[..., 0]
-    k2 = coefficients[..., 1]
+    k1 = coefficients[..., 0:1]
+    k2 = coefficients[..., 1:2]
     r2 = torch.pow(uv, 2).sum(dim=1, keepdim=True)
     r4 = r2 * r2
     distorted = uv * (1.0 + k1[..., None, None] * r2 + k2[..., None, None] * r4)

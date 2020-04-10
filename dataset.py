@@ -27,7 +27,7 @@ class Data(Dataset):
                         self.data.append((root, item))
 
     def __len__(self):
-        return len(self.data)
+        return min(len(self.data), 300)
 
     def __getitem__(self, idx):
         root = self.data[idx][0]
@@ -35,7 +35,7 @@ class Data(Dataset):
         image = os.path.join(root, item['image'])
         depth = None if item['depth'] == 'None' else os.path.join(root, item['depth'])
         ref = dict()
-        for ref_name in ['stereo']:  # , 'previous' ['stereo', 'previous', 'next']:
+        for ref_name in ['stereo', 'previous', 'next']:  # , 'previous' ['stereo', 'previous', 'next']:
             ref[ref_name] = None if item[ref_name] == 'None' \
                 else os.path.join(root, item[ref_name])
 

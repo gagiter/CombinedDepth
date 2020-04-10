@@ -27,34 +27,30 @@ class Criteria(torch.nn.Module):
 
         if self.normal_weight > 0.0:
             loss_normal = 0.0
-            height, width = depth_out.shape[-2:]
+            depth_down = depth_out
             for i in range(self.down_times):
                 depth_down = torch.nn.functional.interpolate(
-                        depth_out, size=(height, width), mode='bilinear', align_corners=True)
+                        depth_down, scale_factor=0.5, mode='bilinear', align_corners=True)
                 normals, _ = util.normal(depth_down, camera)
                 normals_grad = torch.cat(util.grad(normals), dim=1)
                 data_out['residual_normals_%d' % i] = normals * 0.5 + 0.5
                 data_out['residual_normals_grad_%d' % i] = normals_grad.abs().mean(dim=1, keepdims=True)
                 loss_normal += data_out['residual_normals_grad_%d' % i].mean()
-                height >>= 1
-                width >>= 1
             data_out['loss_normal'] = loss_normal / self.down_times * self.normal_weight
             loss += data_out['loss_normal']
 
         if self.plane_weight > 0.0:
             loss_plane = 0.0
-            height, width = depth_out.shape[-2:]
+            depth_down = depth_out
             for i in range(self.down_times):
                 depth_down = torch.nn.functional.interpolate(
-                        depth_out, size=(height, width), mode='bilinear', align_corners=True)
+                        depth_down, scale_factor=0.5, mode='bilinear', align_corners=True)
                 normals, points = util.normal(depth_down, camera)
                 plane = (points * normals).sum(dim=1, keepdims=True)
                 plane_grad = torch.cat(util.grad(plane), dim=1)
                 data_out['residual_plane_%d' % i] = plane.abs()
                 data_out['residual_plane_grad_%d' % i] = plane_grad.abs().mean(dim=1, keepdims=True)
                 loss_plane += data_out['residual_plane_grad_%d' % i].mean()
-                height >>= 1
-                width >>= 1
             data_out['loss_plane'] = loss_plane / self.down_times * self.plane_weight
             loss += data_out['loss_plane']
 
@@ -72,28 +68,24 @@ class Criteria(torch.nn.Module):
 
         for ref in ['stereo', 'previous', 'next']:
             if ref in data_in and self.ref_weight > 0.0:
-                depth_out = data_out['depth']
-                image = data_in['image']
                 image_ref = data_in[ref]
-                camera = data_out['camera']
                 motion = data_out['motion_' + ref]
                 data_out['residual_' + ref] = (image - image_ref).abs()
                 loss_ref = 0.0
-                height, width = image.shape[-2:]
+                image_down = image
+                image_ref_down = image_ref
+                depth_down = depth_out
                 for i in range(self.down_times):
                     image_down = torch.nn.functional.interpolate(
-                        image, size=(height, width), mode='bilinear', align_corners=True)
+                        image_down, scale_factor=0.5, mode='bilinear', align_corners=True)
                     image_ref_down = torch.nn.functional.interpolate(
-                        image_ref, size=(height, width), mode='bilinear', align_corners=True)
-                    depth_out_down = torch.nn.functional.interpolate(
-                        depth_out, size=(height, width), mode='bilinear', align_corners=True)
-                    warp = util.warp(image_ref_down, depth_out_down, camera, motion,
-                                     self.occlusion)
+                        image_ref_down, scale_factor=0.5, mode='bilinear', align_corners=True)
+                    depth_down = torch.nn.functional.interpolate(
+                        depth_down, scale_factor=0.5, mode='bilinear', align_corners=True)
+                    warp = util.warp(image_ref_down, depth_down, camera, motion, self.occlusion)
                     residual = (image_down - warp).abs()
                     data_out['residual_%s_%d' % (ref, i)] = residual
                     loss_ref += residual.mean()
-                    height >>= 1
-                    width >>= 1
                 data_out['loss_' + ref] = loss_ref / self.down_times * self.ref_weight
                 loss += data_out['loss_' + ref]
 
