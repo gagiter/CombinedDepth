@@ -15,15 +15,27 @@ class Criteria(torch.nn.Module):
 
     def forward(self, data_in, data_out):
         loss = 0.0
+        image = data_in['image']
+        image_grad = torch.cat(util.grad(image), dim=1)
+        data_out['image_grad'] = image_grad.abs().mean(dim=1, keepdims=True)
         if self.smooth_weight > 0.0:
             camera = data_out['camera']
-            normal = data_out['normal']
             depth_out = data_out['depth']
-            planar_project = util.planar_project(normal, depth_out, camera)
-            residual_planar = util.laplace_filter(planar_project)
-            data_out['residual_planar_project'] = 1.0 / (planar_project.abs() + 0.00001)
-            data_out['residual_planar'] = residual_planar.abs()
-            data_out['loss_smooth'] = data_out['residual_planar'].mean() * self.smooth_weight
+            loss_smooth = 0.0
+            height, width = depth_out.shape[-2:]
+            for i in range(self.down_times):
+                depth_out_down = torch.nn.functional.interpolate(
+                        depth_out, size=(height, width), mode='bilinear', align_corners=True)
+                normal, points = util.normal(depth_out_down, camera)
+                plane_project = (points * normal).sum(dim=1, keepdims=True)
+                residual_planar = torch.cat(util.grad(plane_project), dim=1)
+                data_out['residual_normal_%d' % i] = normal
+                data_out['residual_plane_project_%d' % i] = plane_project.abs()
+                data_out['residual_planar_%d' % i] = residual_planar.abs().mean(dim=1, keepdims=True)
+                loss_smooth += data_out['residual_planar_%d' % i].mean()
+                height >>= 1
+                width >>= 1
+            data_out['loss_smooth'] = loss_smooth / self.down_times * self.smooth_weight
             loss += data_out['loss_smooth']
 
         if 'depth' in data_in:
