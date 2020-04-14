@@ -35,6 +35,7 @@ parser.add_argument('--rotation_scale', type=float, default=0.5)
 parser.add_argument('--translation_scale', type=float, default=2.0)
 parser.add_argument('--down_times', type=int, default=4)
 parser.add_argument('--occlusion', type=int, default=1)
+parser.add_argument('--trace_jit', type=int, default=1)
 
 args = parser.parse_args()
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
@@ -51,7 +52,6 @@ def train():
     model = Model(args.encoder, rotation_scale=args.rotation_scale,
                   translation_scale=args.translation_scale,
                   depth_scale=args.depth_scale)
-    model = model.to(device)
 
     optimiser = torch.optim.Adam(model.parameters(), lr=args.lr)
 
@@ -71,6 +71,12 @@ def train():
         model.load_state_dict(torch.load(os.path.join(load_dir, 'model.pth')))
         optimiser.load_state_dict(torch.load(os.path.join(load_dir, 'optimiser.pth')))
         args.epoch_start = torch.load(os.path.join(load_dir, 'epoch.pth'))['epoch']
+
+    if args.trace_jit > 0:
+        example = torch.rand(1, 3, 256, 512)
+        traced_script_module = torch.jit.trace(model.depth_net, example)
+        traced_script_module.save(os.path.join(load_dir, "trace_model.pt"))
+    model = model.to(device)
 
     for epoch in range(args.epoch_start, args.epoch_start + args.epoch_num):
         model.train()
