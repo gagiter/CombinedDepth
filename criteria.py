@@ -57,7 +57,7 @@ class Criteria(torch.nn.Module):
         if 'depth' in data_in:
             depth_in = data_in['depth']
             depth_out = data_out['depth']
-            mask = depth_in > 0.00001
+            mask = depth_in > 0.001
             residual_depth = torch.zeros_like(depth_in)
             residual_depth[mask] = depth_in[mask] - depth_out[mask]
             data_out['residual_depth'] = residual_depth.abs()

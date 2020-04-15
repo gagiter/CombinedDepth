@@ -4,15 +4,20 @@ from torch.utils.data import Dataset
 from PIL import Image
 import torchvision.transforms.functional as TF
 import csv
+import math
+import random
 
 
 class Data(Dataset):
-    def __init__(self, data_root, mode='train', device='cpu'):
+    def __init__(self, data_root, target_pixels=350000, mode='train', device='cpu', shuffle=True):
         super(Data, self).__init__()
         self.data_root = data_root
+        self.target_pixels = target_pixels
         self.mode = mode
         self.device = device
         self.data = []
+        self.index = -1
+        self.shuffle = shuffle
         self.load_data()
 
     def load_data(self):
@@ -27,7 +32,7 @@ class Data(Dataset):
                         self.data.append((root, item))
 
     def __len__(self):
-        return min(len(self.data), 300)
+        return len(self.data)
 
     def __getitem__(self, idx):
         root = self.data[idx][0]
@@ -41,23 +46,26 @@ class Data(Dataset):
 
         out = dict()
         image = Image.open(image)
-        image = TF.center_crop(image, (256, 512))
+        scale_factor = math.sqrt(self.target_pixels / (image.width * image.height))
+        height = int(image.height * scale_factor)
+        width = int(image.width * scale_factor)
+        image = TF.resize(image, (height, width))
         image = TF.to_tensor(image)
         out['image'] = image
 
         if depth:
             depth = Image.open(depth)
-            depth = TF.center_crop(depth, (256, 512))
+            depth = TF.resize(depth, (height, width), Image.NEAREST)
             depth = TF.to_tensor(depth).float()
             depth /= 256.0
-            mask = depth > 0.00001
+            mask = depth > 0.01
             depth[mask] = 1.0 / depth[mask]
             out['depth'] = depth
 
         for ref_key in ref:
             if ref[ref_key] is not None:
                 ref[ref_key] = Image.open(ref[ref_key])
-                ref[ref_key] = TF.center_crop(ref[ref_key], (256, 512))
+                ref[ref_key] = TF.resize(ref[ref_key], (height, width))
                 ref[ref_key] = TF.to_tensor(ref[ref_key])
                 out[ref_key] = ref[ref_key]
 
@@ -65,3 +73,14 @@ class Data(Dataset):
             out[out_item] = out[out_item].to(self.device)
 
         return out
+
+    def __next__(self):
+        if self.shuffle:
+            self.index = random.randint(0, len(self) - 1)
+        else:
+            self.index = (self.index + 1) % len(self)
+        item = self[self.index % len(self)]
+        for key in item:
+            item[key] = item[key].unsqueeze(0)
+        return item
+

@@ -1,6 +1,8 @@
 import torch.nn
 import torch
-import segmentation_models_pytorch as smp
+# import segmentation_models_pytorch as smp
+import smp
+import net
 
 
 class Vector(torch.nn.Module):
@@ -34,6 +36,7 @@ class Model(torch.nn.Module):
     def __init__(self, encoder='resnet34', depth_scale=1.0, rotation_scale=1.0, translation_scale=1.0):
         super(Model, self).__init__()
         self.depth_net = Matrix(encoder, in_channels=3, out_channels=1)
+        # self.depth_net = net.Dense(in_channels=3, out_channels=1)
         self.camera_net = Vector(encoder, in_channels=3, out_channels=6)
         self.motion_net = Vector(encoder, in_channels=6, out_channels=6)
         self.depth_scale = depth_scale
