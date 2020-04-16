@@ -58,7 +58,8 @@ class Data(Dataset):
             depth = TF.resize(depth, (height, width), Image.NEAREST)
             depth = TF.to_tensor(depth).float()
             depth /= 256.0
-            mask = depth > 0.01
+            mask = depth > 1.0
+            mask &= depth < 80.0
             depth[mask] = 1.0 / depth[mask]
             out['depth'] = depth
 

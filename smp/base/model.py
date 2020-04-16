@@ -1,5 +1,6 @@
 import torch
 from . import initialization as init
+import torch.nn.functional as F
 
 
 class SegmentationModel(torch.nn.Module):
@@ -12,8 +13,10 @@ class SegmentationModel(torch.nn.Module):
 
     def forward(self, x):
         """Sequentially pass `x` trough model`s encoder, decoder and heads"""
+        x_shape = x.shape[-2:]
         features = self.encoder(x)
-        decoder_output = self.decoder(*features)
+        decoder_output = self.decoder(*features, ori_shape=x_shape,)
+        # decoder_output = F.interpolate(decoder_output, size=x_shape, mode="nearest")
 
         masks = self.segmentation_head(decoder_output)
 

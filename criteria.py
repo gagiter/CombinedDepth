@@ -43,8 +43,9 @@ class Criteria(torch.nn.Module):
             loss_plane = 0.0
             depth_down = depth_out
             for i in range(self.down_times):
+                scale_factor = 1.0 if i == 0 else 0.5
                 depth_down = torch.nn.functional.interpolate(
-                        depth_down, scale_factor=0.5, mode='bilinear', align_corners=True)
+                    depth_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
                 normals, points = util.normal(depth_down, camera)
                 plane = (points * normals).sum(dim=1, keepdims=True)
                 plane_grad = torch.cat(util.grad(plane), dim=1)
@@ -57,7 +58,7 @@ class Criteria(torch.nn.Module):
         if 'depth' in data_in:
             depth_in = data_in['depth']
             depth_out = data_out['depth']
-            mask = depth_in > 0.001
+            mask = depth_in > (1.0 / 80.0)
             residual_depth = torch.zeros_like(depth_in)
             residual_depth[mask] = depth_in[mask] - depth_out[mask]
             data_out['residual_depth'] = residual_depth.abs()
@@ -76,12 +77,13 @@ class Criteria(torch.nn.Module):
                 image_ref_down = image_ref
                 depth_down = depth_out
                 for i in range(self.down_times):
+                    scale_factor = 1.0 if i == 0 else 0.5
                     image_down = torch.nn.functional.interpolate(
-                        image_down, scale_factor=0.5, mode='bilinear', align_corners=True)
+                        image_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
                     image_ref_down = torch.nn.functional.interpolate(
-                        image_ref_down, scale_factor=0.5, mode='bilinear', align_corners=True)
+                        image_ref_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
                     depth_down = torch.nn.functional.interpolate(
-                        depth_down, scale_factor=0.5, mode='bilinear', align_corners=True)
+                        depth_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
                     warp = util.warp(image_ref_down, depth_down, camera, motion, self.occlusion)
                     residual = (image_down - warp).abs()
                     data_out['residual_%s_%d' % (ref, i)] = residual

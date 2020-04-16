@@ -112,12 +112,14 @@ def train():
             torch.save(optimiser.state_dict(), os.path.join(save_dir, 'optimiser.pth'))
             torch.save({'step': step}, os.path.join(save_dir, 'step.pth'))
 
+
             points = data_out['points'][0].data.cpu().numpy()
             points = points.transpose(1, 2, 0).reshape(-1, 3)
-            pcd.points = o3d.utility.Vector3dVector(points)
+            half_height = points.shape[0] // 2
+            pcd.points = o3d.utility.Vector3dVector(points[half_height:])
             colors = data_in['image'][0].data.cpu().numpy()
             colors = colors.transpose(1, 2, 0).reshape(-1, 3)
-            pcd.colors = o3d.utility.Vector3dVector(colors)
+            pcd.colors = o3d.utility.Vector3dVector(colors[half_height:])
             # normals = data_out['normals'][0].data.cpu().numpy()
             # normals = normals.transpose(1, 2, 0).reshape(-1, 3)
             # pcd.normals = o3d.utility.Vector3dVector(normals)

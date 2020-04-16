@@ -32,11 +32,13 @@ class DecoderBlock(nn.Module):
         )
         self.attention2 = md.Attention(attention_type, in_channels=out_channels)
 
-    def forward(self, x, skip=None):
-        x = F.interpolate(x, scale_factor=2, mode="nearest")
+    def forward(self, x, skip=None, ori_shape=None):
         if skip is not None:
+            x = F.interpolate(x, size=skip.shape[-2:], mode="nearest")
             x = torch.cat([x, skip], dim=1)
             x = self.attention1(x)
+        else:
+            x = F.interpolate(x, size=ori_shape, mode="nearest")
         x = self.conv1(x)
         x = self.conv2(x)
         x = self.attention2(x)
@@ -105,7 +107,7 @@ class UnetDecoder(nn.Module):
         ]
         self.blocks = nn.ModuleList(blocks)
 
-    def forward(self, *features):
+    def forward(self, *features, ori_shape):
 
         features = features[1:]    # remove first skip with same spatial resolution
         features = features[::-1]  # reverse channels to start from head of encoder
@@ -116,6 +118,6 @@ class UnetDecoder(nn.Module):
         x = self.center(head)
         for i, decoder_block in enumerate(self.blocks):
             skip = skips[i] if i < len(skips) else None
-            x = decoder_block(x, skip)
+            x = decoder_block(x, skip, ori_shape)
 
         return x
