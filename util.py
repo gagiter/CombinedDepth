@@ -38,12 +38,16 @@ def laplace(image):
     return lap
 
 
-def grad(image):
+def grad(image, padding=False):
     height, width = image.shape[-2:]
-    grad_x = torch.zeros_like(image)
-    grad_y = torch.zeros_like(image)
-    grad_x[:, :, :, :width-1] = image[:, :, :, 1:] - image[:, :, :, :width-1]
-    grad_y[:, :, :height-1, :] = image[:, :, 1:, :] - image[:, :, :height-1, :]
+    if padding:
+        grad_x = torch.zeros_like(image)
+        grad_y = torch.zeros_like(image)
+        grad_x[:, :, :, :width - 1] = image[:, :, :, 1:] - image[:, :, :, :width - 1]
+        grad_y[:, :, :height - 1, :] = image[:, :, 1:, :] - image[:, :, :height - 1, :]
+    else:
+        grad_x = image[:, :, :height - 1, 1:] - image[:, :, :height - 1, :width - 1]
+        grad_y = image[:, :, 1:, :width - 1] - image[:, :, :height - 1, :width - 1]
     return grad_x, grad_y
 
 
@@ -61,11 +65,12 @@ def sobel(image):
 
 
 def visualize(data):
-    depth = data['depth']
-    depth = torch.exp(-0.025 * depth)
-    depth_i = 1.0 - depth
-    color = torch.cat([depth_i, depth_i, depth], dim=1)
-    data['depth_v'] = color
+    if 'depth' in data:
+        # red = (0.5 - data['depth']).abs()
+        # green = data['depth']
+        # blue = 1.0 - data['depth']
+        # data['depth_v'] = torch.cat([red, green, blue], dim=1)
+        data['depth_v'] = data['depth']
 
 
 def camera_scope(camera, shape):

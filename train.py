@@ -9,6 +9,7 @@ from criteria import Criteria
 from model import Model
 import open3d as o3d
 from datetime import datetime
+import util
 
 parser = argparse.ArgumentParser(description='CombinedDepth')
 parser.add_argument('--data_root', type=str, default='data')
@@ -21,7 +22,7 @@ parser.add_argument('--gpu_id', type=str, default='1')
 parser.add_argument('--lr', type=float, default=0.01)
 parser.add_argument('--momentum', type=float, default=0.5)
 parser.add_argument('--step_start', type=int, default=0)
-parser.add_argument('--step_number', type=int, default=50000)
+parser.add_argument('--step_number', type=int, default=5000000)
 parser.add_argument('--summary_freq', type=int, default=100)
 parser.add_argument('--save_freq', type=int, default=100)
 parser.add_argument('--plane_weight', type=float, default=1.0)
@@ -34,6 +35,8 @@ parser.add_argument('--translation_scale', type=float, default=2.0)
 parser.add_argument('--down_times', type=int, default=4)
 parser.add_argument('--occlusion', type=int, default=1)
 parser.add_argument('--target_pixels', type=int, default=300000)
+parser.add_argument('--global_depth', type=int, default=1)
+parser.add_argument('--use_number', type=int, default=0)
 
 args = parser.parse_args()
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
@@ -44,7 +47,7 @@ def train():
     device = torch.device('cuda' if use_cuda else 'cpu')
 
     train_data = dataset.Data(args.data_root, target_pixels=args.target_pixels,
-                              device=device)
+                              use_number=args.use_number, device=device)
 
     model = Model(args.encoder, rotation_scale=args.rotation_scale,
                   translation_scale=args.translation_scale,
@@ -57,7 +60,9 @@ def train():
         plane_weight=args.plane_weight,
         ref_weight=args.ref_weight,
         down_times=args.down_times,
-        occlusion=True if args.occlusion > 0 else False
+        occlusion=True if args.occlusion > 0 else False,
+        global_depth=args.global_depth
+
     )
     pcd = o3d.geometry.PointCloud()
 
@@ -89,13 +94,17 @@ def train():
         if step % args.summary_freq == 0:
             loss = sum(losses) / len(losses)
             print('step:%d loss:%f' % (step, loss))
+            util.visualize(data_in)
+            util.visualize(data_out)
             if 'abs_rel' in data_out:
                 writer.add_scalar('eval/abs_rel', data_out['abs_rel'], global_step=step)
             writer.add_scalar('loss', loss, global_step=step)
             writer.add_image('image/image', data_in['image'][0], global_step=step)
-            writer.add_image('image/depth_in', data_in['depth'][0] * 3.0, global_step=step)
-            writer.add_image('image/depth_out', data_out['depth'][0] * 3.0, global_step=step)
             writer.add_image('image/image_grad', data_out['image_grad'][0], global_step=step)
+            if 'depth_v' in data_in:
+                writer.add_image('image/depth_in', data_in['depth_v'][0], global_step=step)
+            if 'depth_v' in data_out:
+                writer.add_image('image/depth_out', data_out['depth_v'][0], global_step=step)
             for key in data_out:
                 if 'residual' in key:
                     writer.add_image('residual/' + key, data_out[key][0], global_step=step)
@@ -112,7 +121,6 @@ def train():
             torch.save(optimiser.state_dict(), os.path.join(save_dir, 'optimiser.pth'))
             torch.save({'step': step}, os.path.join(save_dir, 'step.pth'))
 
-
             points = data_out['points'][0].data.cpu().numpy()
             points = points.transpose(1, 2, 0).reshape(-1, 3)
             half_height = points.shape[0] // 2
@@ -120,9 +128,6 @@ def train():
             colors = data_in['image'][0].data.cpu().numpy()
             colors = colors.transpose(1, 2, 0).reshape(-1, 3)
             pcd.colors = o3d.utility.Vector3dVector(colors[half_height:])
-            # normals = data_out['normals'][0].data.cpu().numpy()
-            # normals = normals.transpose(1, 2, 0).reshape(-1, 3)
-            # pcd.normals = o3d.utility.Vector3dVector(normals)
             o3d.io.write_point_cloud(os.path.join(save_dir, '%s-%010d.pcd' % (args.model_name, step)), pcd)
             print('saved to ' + save_dir)
 

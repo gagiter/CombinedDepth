@@ -9,10 +9,12 @@ import random
 
 
 class Data(Dataset):
-    def __init__(self, data_root, target_pixels=350000, mode='train', device='cpu', shuffle=True):
+    def __init__(self, data_root, target_pixels=350000, use_number=0,
+                 mode='train', device='cpu', shuffle=True):
         super(Data, self).__init__()
         self.data_root = data_root
         self.target_pixels = target_pixels
+        self.use_number = use_number
         self.mode = mode
         self.device = device
         self.data = []
@@ -32,7 +34,8 @@ class Data(Dataset):
                         self.data.append((root, item))
 
     def __len__(self):
-        return len(self.data)
+        return len(self.data) if self.use_number == 0 else \
+            min(self.use_number, len(self.data))
 
     def __getitem__(self, idx):
         root = self.data[idx][0]
@@ -46,6 +49,8 @@ class Data(Dataset):
 
         out = dict()
         image = Image.open(image)
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
         scale_factor = math.sqrt(self.target_pixels / (image.width * image.height))
         height = int(image.height * scale_factor)
         width = int(image.width * scale_factor)
@@ -58,8 +63,8 @@ class Data(Dataset):
             depth = TF.resize(depth, (height, width), Image.NEAREST)
             depth = TF.to_tensor(depth).float()
             depth /= 256.0
-            mask = depth > 1.0
-            mask &= depth < 80.0
+            mask = depth > 0.1
+            # mask &= depth < 80.0
             depth[mask] = 1.0 / depth[mask]
             out['depth'] = depth
 
@@ -67,6 +72,8 @@ class Data(Dataset):
             if ref[ref_key] is not None:
                 ref[ref_key] = Image.open(ref[ref_key])
                 ref[ref_key] = TF.resize(ref[ref_key], (height, width))
+                if ref[ref_key].mode != 'RGB':
+                    ref[ref_key] = ref[ref_key].convert('RGB')
                 ref[ref_key] = TF.to_tensor(ref[ref_key])
                 out[ref_key] = ref[ref_key]
 
