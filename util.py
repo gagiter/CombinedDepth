@@ -2,6 +2,7 @@
 import torch
 import torch.nn.functional as F
 import function
+import math
 
 
 def normal(depth, camera):
@@ -64,13 +65,27 @@ def sobel(image):
     return grad_x, grad_y
 
 
+def color_map(image):
+    red = torch.sin(image * 20 + 100)
+    green = torch.sin(image * 30 + 125)
+    blue = torch.sin(image * 40 + 88)
+
+    red = red * 0.5 + 0.5
+    green = green * 0.5 + 0.5
+    blue = blue * 0.5 + 0.5
+    # green = data['depth']
+    # blue = 1.0 - data['depth']
+    return torch.cat([red, green, blue], dim=1)
+
+
 def visualize(data):
+    if 'image' in data:
+        batch, _, height, width = data['image'].shape
+        cm = torch.linspace(0.0, 1.0, height, dtype=torch.float)
+        cm = cm.repeat([batch, 1, width, 1]).permute(0, 1, 3, 2)
+        data['color_map'] = color_map(cm)
     if 'depth' in data:
-        # red = (0.5 - data['depth']).abs()
-        # green = data['depth']
-        # blue = 1.0 - data['depth']
-        # data['depth_v'] = torch.cat([red, green, blue], dim=1)
-        data['depth_v'] = data['depth']
+        data['depth_v'] = color_map(data['depth'])
 
 
 def camera_scope(camera, shape):

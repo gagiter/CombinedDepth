@@ -100,6 +100,7 @@ def train():
                 writer.add_scalar('eval/abs_rel', data_out['abs_rel'], global_step=step)
             writer.add_scalar('loss', loss, global_step=step)
             writer.add_image('image/image', data_in['image'][0], global_step=step)
+            writer.add_image('image/color_map', data_in['color_map'][0], global_step=step)
             writer.add_image('image/image_grad', data_out['image_grad'][0], global_step=step)
             if 'depth_v' in data_in:
                 writer.add_image('image/depth_in', data_in['depth_v'][0], global_step=step)
