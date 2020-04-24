@@ -31,19 +31,18 @@ class Criteria(torch.nn.Module):
             normal_down = normal
             for i in range(self.down_times):
                 scale_factor = 1.0 if i == 0 else 0.5
-
-                # image_down = torch.nn.functional.interpolate(
-                #         image_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
+                image_down = torch.nn.functional.interpolate(
+                        image_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
                 normal_down = torch.nn.functional.interpolate(
                         normal_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
                 normal_grad = torch.cat(util.sobel(normal_down), dim=1).abs().mean(dim=1, keepdim=True)
-                # image_grad = torch.cat(util.sobel(image_down), dim=1).abs().mean(dim=1, keepdim=True)
-                # image_grad_inv = 1.0 - image_grad
-                regular = normal_grad  # * image_grad_inv
+                image_grad = torch.cat(util.sobel(image_down), dim=1).abs().mean(dim=1, keepdim=True)
+                image_grad_inv = 1.0 - image_grad
+                regular = normal_grad * image_grad_inv
                 data_out['grad_normal_%d' % i] = normal_grad
-                # data_out['grad_image_%d' % i] = image_grad
-                # data_out['grad_image_inv_%d' % i] = image_grad_inv
-                data_out['residual_regular_%d' % i] = regular
+                data_out['grad_image_%d' % i] = image_grad
+                data_out['grad_image_inv_%d' % i] = image_grad_inv
+                data_out['grad_regular_%d' % i] = regular
                 loss_regular += regular.mean()
 
             data_out['loss_regular'] = loss_regular / self.down_times * self.regular_weight

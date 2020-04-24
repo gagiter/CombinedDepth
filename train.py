@@ -114,7 +114,7 @@ def train():
             if 'depth_v' in data_in:
                 writer.add_image('image/depth_in', data_in['depth_v'][0], global_step=step)
             if 'depth_v' in data_out:
-                writer.add_image('image/depth_out', data_out['depth_v'][0], global_step=step)
+                writer.add_image('image/depth_out', data_out['depth'][0], global_step=step)
             for key in data_out:
                 if 'base' in key:
                     writer.add_image('image/' + key, data_out[key][0], global_step=step)
@@ -140,11 +140,10 @@ def train():
 
             points = data_out['points'][0].data.cpu().numpy()
             points = points.transpose(1, 2, 0).reshape(-1, 3)
-            half_height = points.shape[0] // 2
-            pcd.points = o3d.utility.Vector3dVector(points[half_height:])
+            pcd.points = o3d.utility.Vector3dVector(points)
             colors = data_in['image'][0].data.cpu().numpy()
             colors = colors.transpose(1, 2, 0).reshape(-1, 3)
-            pcd.colors = o3d.utility.Vector3dVector(colors[half_height:])
+            pcd.colors = o3d.utility.Vector3dVector(colors)
             o3d.io.write_point_cloud(os.path.join(save_dir, '%s-%010d.pcd' % (args.model_name, step)), pcd)
             print('saved to ' + save_dir)
 
