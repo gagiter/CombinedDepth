@@ -5,6 +5,20 @@ import function
 import math
 
 
+def hit_plane(ground, camera, image):
+    batch, _, height, width = image.shape
+    uv = near_grid(camera, [height, width], image.device)
+    ones = torch.ones([batch, 1, height, width], dtype=uv.dtype, device=uv.device)
+    ray = torch.cat([uv, ones], dim=1)
+    hit = ground[:, 0:3].reshape(batch, 3, 1, 1)
+    hit = (hit * ray).sum(dim=1, keepdim=True)
+    hit = hit / (ground[:, 3].reshape(batch, 1, 1, 1) + 0.00001)
+    mask = hit < 0.0
+    mask |= hit > 1.0
+    hit[mask] = 0.0
+    return hit
+
+
 def normal(depth, camera):
     points = unproject(depth, camera)
     points = points[:, 0:3, ...] / (points[:, 3:4, ...] + 0.00001)
@@ -20,26 +34,6 @@ def cross(a, b):
     c[:, 1, ...] = a[:, 2, ...] * b[:, 0, ...] - a[:, 0, ...] * b[:, 2, ...]
     c[:, 2, ...] = a[:, 0, ...] * b[:, 1, ...] - a[:, 1, ...] * b[:, 0, ...]
     return c
-
-
-def planar_project(normal, depth, camera):
-    points = unproject(depth, camera)
-    points = points[:, 0:3, ...] / (points[:, 3:4, ...] + 0.00001)
-    distance = (points * normal).sum(dim=1, keepdim=True)
-    return distance
-
-
-def grad(image, padding=False):
-    height, width = image.shape[-2:]
-    if padding:
-        grad_x = torch.zeros_like(image)
-        grad_y = torch.zeros_like(image)
-        grad_x[:, :, :, :width - 1] = image[:, :, :, 1:] - image[:, :, :, :width - 1]
-        grad_y[:, :, :height - 1, :] = image[:, :, 1:, :] - image[:, :, :height - 1, :]
-    else:
-        grad_x = image[:, :, :height - 1, 1:] - image[:, :, :height - 1, :width - 1]
-        grad_y = image[:, :, 1:, :width - 1] - image[:, :, :height - 1, :width - 1]
-    return grad_x, grad_y
 
 
 def sobel(image):
@@ -59,7 +53,7 @@ def sobel(image):
 
     grad_x = F.conv2d(image, filter_x, padding=2, groups=channles)
     grad_y = F.conv2d(image, filter_y, padding=2, groups=channles)
-    return grad_x / 4.5, grad_y / 4.5
+    return grad_x / 7.5, grad_y / 7.5
 
 
 def color_map(image):
@@ -72,8 +66,6 @@ def color_map(image):
     red = red * 0.5 + 0.5
     green = green * 0.5 + 0.5
     blue = blue * 0.5 + 0.5
-    # green = data['depth']
-    # blue = 1.0 - data['depth']
     return torch.cat([red, green, blue], dim=-3)
 
 
@@ -90,11 +82,15 @@ def visualize(data):
 
 
 def camera_scope(camera, shape):
-    half_fov_y = 0.25 + camera[:, 0]  # mean half_fov_y = 0.42 rad about 25 deg
-    center_x = camera[:, 2]
-    center_y = camera[:, 3]
-    half_height = torch.tan(half_fov_y)
-    half_width = half_height * (1.0 + camera[:, 1]) * (shape[1] / shape[0])
+    half_fov = 0.25 + camera[:, 0]  # mean half_fov_y = 0.42 rad about 25 deg
+    center_x = camera[:, 1]
+    center_y = camera[:, 2]
+    if shape[0] > shape[1]:  # portrait
+        half_width = torch.tan(half_fov)
+        half_height = half_width * (shape[0] / shape[1])
+    else:  # landscape
+        half_height = torch.tan(half_fov)
+        half_width = half_height * (shape[1] / shape[0])
 
     left = center_x - half_width
     top = center_y - half_height
@@ -205,7 +201,7 @@ def project(points, camera, motion):
     points = transform(motion, points)
     uv = points[:, 0:2, ...]
     uv = uv / points[:, 2:3, ...]
-    uv = distort(uv, camera[..., 4:6])
+    uv = distort(uv, camera[..., 3:5])
     return uv
 
 

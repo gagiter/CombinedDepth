@@ -29,6 +29,7 @@ parser.add_argument('--ref_weight', type=float, default=1.0)
 parser.add_argument('--depth_weight', type=float, default=1.0)
 parser.add_argument('--global_depth', type=int, default=1)
 parser.add_argument('--regular_weight', type=float, default=1.0)
+parser.add_argument('--ground_weight', type=float, default=1.0)
 parser.add_argument('--depth_scale', type=float, default=1.0)
 parser.add_argument('--rotation_scale', type=float, default=0.5)
 parser.add_argument('--translation_scale', type=float, default=2.0)
@@ -62,6 +63,7 @@ def train():
         depth_weight=args.depth_weight,
         regular_weight=args.regular_weight,
         ref_weight=args.ref_weight,
+        ground_weight=args.ground_weight,
         down_times=args.down_times,
         occlusion=True if args.occlusion > 0 else False,
         global_depth=args.global_depth
@@ -111,23 +113,25 @@ def train():
             writer.add_image('image/image', data_in['image'][0], global_step=step)
             writer.add_image('image/color_map', data_in['color_map'][0], global_step=step)
             writer.add_image('image/normal', data_out['normal_v'][0], global_step=step)
+            writer.add_text('camera', str(data_out['camera'][0].data.cpu().numpy()), global_step=step)
             if 'depth_v' in data_in:
                 writer.add_image('image/depth_in', data_in['depth_v'][0], global_step=step)
             if 'depth_v' in data_out:
                 writer.add_image('image/depth_out', data_out['depth'][0], global_step=step)
             for key in data_out:
-                if 'base' in key:
+                if key.startswith('base'):
                     writer.add_image('image/' + key, data_out[key][0], global_step=step)
-                elif 'residual' in key:
-                    # residual_v = util.color_map(data_out[key][0])
+                elif key.startswith('residual_'):
                     writer.add_image('residual/' + key, data_out[key][0], global_step=step)
-                elif 'warp' in key:
+                elif key.startswith('warp_'):
                     writer.add_image('warp/' + key, data_out[key][0], global_step=step)
-                elif 'grad' in key:
+                elif key.startswith('grad_'):
                     writer.add_image('grad/' + key, data_out[key][0], global_step=step)
-                elif 'loss' in key:
+                elif key.startswith('ground_'):
+                    writer.add_image('ground/' + key, data_out[key][0], global_step=step)
+                elif key.startswith('loss'):
                     writer.add_scalar('loss/' + key, data_out[key], global_step=step)
-                elif 'motion' in key:
+                elif key.startswith('motion_'):
                     writer.add_text('motion/' + key, str(data_out[key][0].data.cpu().numpy()), global_step=step)
             losses = []
 

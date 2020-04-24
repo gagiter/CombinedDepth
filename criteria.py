@@ -5,12 +5,13 @@ import util
 
 class Criteria(torch.nn.Module):
     def __init__(self, depth_weight=1.0, regular_weight=1.0,
-                 ref_weight=1.0, down_times=4, occlusion=True,
+                 ref_weight=1.0, ground_weight=1.0, down_times=4, occlusion=True,
                  global_depth=1):
         super(Criteria, self).__init__()
         self.regular_weight = regular_weight
         self.ref_weight = ref_weight
         self.depth_weight = depth_weight
+        self.ground_weight = ground_weight
         self.down_times = down_times
         self.occlusion = occlusion
         self.global_depth = global_depth
@@ -19,10 +20,24 @@ class Criteria(torch.nn.Module):
         loss = 0.0
         image = data_in['image']
         camera = data_out['camera']
+        ground = data_out['ground']
         depth_out = data_out['depth']
         normal, points = util.normal(depth_out, camera)
         data_out['normal'] = normal
         data_out['points'] = points
+
+        if self.ground_weight > 0.0:
+            hit = util.hit_plane(ground, camera, image)
+            # ground_residual = ground[:3].dot(normal) * (hit - depth_out).abs()
+            data_out['ground_hit'] = hit
+            ground_dot = ground[:, 0:3].reshape(-1, 3, 1, 1)
+            ground_dot = (ground_dot * normal).sum(dim=1, keepdim=True)
+            data_out['ground_dot'] = ground_dot
+            ground_dist = torch.exp(-2.8 * torch.pow((hit - depth_out), 2))
+            data_out['ground_dist'] = ground_dist
+            data_out['ground_residual'] = 1.0 - (ground_dot * ground_dist)
+            data_out['loss_ground'] = data_out['ground_residual'].mean()
+            loss += data_out['loss_ground']
 
         if self.regular_weight > 0.0:
             loss_regular = 0.0

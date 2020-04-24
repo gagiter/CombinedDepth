@@ -36,8 +36,7 @@ class Model(torch.nn.Module):
     def __init__(self, encoder='resnet34', depth_scale=1.0, rotation_scale=1.0, translation_scale=1.0):
         super(Model, self).__init__()
         self.depth_net = Matrix(encoder, in_channels=3, out_channels=1)
-        # self.depth_net = net.Dense(in_channels=3, out_channels=1)
-        self.camera_net = Vector(encoder, in_channels=3, out_channels=6)
+        self.camera_net = Vector(encoder, in_channels=3, out_channels=9)
         self.motion_net = Vector(encoder, in_channels=6, out_channels=6)
         self.depth_scale = depth_scale
         self.rotation_scale = rotation_scale
@@ -47,8 +46,12 @@ class Model(torch.nn.Module):
         data_out = dict()
         image = data['image']
         data_out['depth'] = self.depth_net(image)
-        data_out['camera'] = self.camera_net(image) * 0.01
-        data_out['camera'] = torch.zeros_like(data_out['camera'])
+        camera = self.camera_net(image)
+
+        data_out['camera'] = camera[:, 0:5] * 0.1
+        ground_n = torch.nn.functional.normalize(camera[:, 5:8])
+        ground_d = (camera[:, 8:9] + 0.5) * 2.0
+        data_out['ground'] = torch.cat([ground_n, ground_d], dim=1)
 
         for ref in ['stereo', 'previous', 'next']:
             if ref in data:
