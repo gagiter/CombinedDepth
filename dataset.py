@@ -6,14 +6,18 @@ import torchvision.transforms.functional as TF
 import csv
 import math
 import random
+from PIL import ImageOps
 
 
 class Data(Dataset):
-    def __init__(self, data_root, target_pixels=350000, use_number=0,
+    def __init__(self, data_root, target_pixels=350000,
+                 target_width=640, target_height=480, use_number=0,
                  mode='train', device='cpu', shuffle=True):
         super(Data, self).__init__()
         self.data_root = data_root
         self.target_pixels = target_pixels
+        self.target_width = target_width
+        self.target_height = target_height
         self.use_number = use_number
         self.mode = mode
         self.device = device
@@ -48,18 +52,25 @@ class Data(Dataset):
                 else os.path.join(root, item[ref_name])
 
         out = dict()
+        # print(image)
         image = Image.open(image)
+        image = ImageOps.exif_transpose(image)
         if image.mode != 'RGB':
             image = image.convert('RGB')
-        scale_factor = math.sqrt(self.target_pixels / (image.width * image.height))
-        height = int(image.height * scale_factor)
-        width = int(image.width * scale_factor)
+        if self.target_pixels > 0:
+            scale_factor = math.sqrt(self.target_pixels / (image.width * image.height))
+            height = int(image.height * scale_factor)
+            width = int(image.width * scale_factor)
+        else:
+            height = self.target_height
+            width = self.target_width
         image = TF.resize(image, (height, width))
         image = TF.to_tensor(image)
         out['image'] = image
 
         if depth:
             depth = Image.open(depth)
+            depth = ImageOps.exif_transpose(depth)
             depth = TF.resize(depth, (height, width), Image.NEAREST)
             depth = TF.to_tensor(depth).float()
             depth /= 256.0
@@ -71,6 +82,7 @@ class Data(Dataset):
         for ref_key in ref:
             if ref[ref_key] is not None:
                 ref[ref_key] = Image.open(ref[ref_key])
+                ref[ref_key] = ImageOps.exif_transpose(ref[ref_key])
                 ref[ref_key] = TF.resize(ref[ref_key], (height, width))
                 if ref[ref_key].mode != 'RGB':
                     ref[ref_key] = ref[ref_key].convert('RGB')

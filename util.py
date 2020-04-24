@@ -8,7 +8,7 @@ import math
 def normal(depth, camera):
     points = unproject(depth, camera)
     points = points[:, 0:3, ...] / (points[:, 3:4, ...] + 0.00001)
-    grad_x, grad_y = grad(points)
+    grad_x, grad_y = sobel(points)
     normals = cross(grad_x, grad_y)
     normals = torch.nn.functional.normalize(normals)
     return normals, points
@@ -29,16 +29,6 @@ def planar_project(normal, depth, camera):
     return distance
 
 
-def laplace(image):
-    channles = image.shape[1]
-    torch.Tensor()
-    kernel = torch.Tensor([[0.0, -0.25, 0.0], [-0.25, 1.0, -0.25], [0.0, -0.25, 0.0]]
-                          ).to(image.device).view(1, 1, 3, 3)
-    kernel = kernel.repeat(channles, 1, 1, 1)
-    lap = F.conv2d(image, kernel, padding=1, groups=channles)
-    return lap
-
-
 def grad(image, padding=False):
     height, width = image.shape[-2:]
     if padding:
@@ -54,28 +44,37 @@ def grad(image, padding=False):
 
 def sobel(image):
     channles = image.shape[1]
-    filter_x = torch.Tensor([[-0.25, 0.0, 0.25], [-0.5, 0.0, 0.5], [-0.25, 0.0, 0.25]],
-                            device=image.device).view(1, 1, 3, 3)
-    filter_y = torch.Tensor([[-0.25, -0.5, -0.25], [0.0, 0.0, 0.0], [0.25, 0.5, 0.25]],
-                            device=image.device).view(1, 1, 3, 3)
+    filter_x = torch.zeros([1, 1, 5, 5], dtype=torch.float, device=image.device)
+    filter_x[:, :, :, 0:1] = -0.5
+    filter_x[:, :, :, 1:2] = -1.0
+    filter_x[:, :, :, 3:4] = +1.0
+    filter_x[:, :, :, 4:5] = +0.5
+    filter_y = torch.zeros([1, 1, 5, 5], dtype=torch.float, device=image.device)
+    filter_y[:, :, 0:1, :] = -0.5
+    filter_y[:, :, 1:2, :] = -1.0
+    filter_y[:, :, 3:4, :] = +1.0
+    filter_y[:, :, 4:5, :] = +0.5
     filter_x = filter_x.repeat(channles, 1, 1, 1)
     filter_y = filter_y.repeat(channles, 1, 1, 1)
-    grad_x = F.conv2d(image, filter_x, padding=1, groups=channles)
-    grad_y = F.conv2d(image, filter_y, padding=1, groups=channles)
-    return grad_x, grad_y
+
+    grad_x = F.conv2d(image, filter_x, padding=2, groups=channles)
+    grad_y = F.conv2d(image, filter_y, padding=2, groups=channles)
+    return grad_x / 4.5, grad_y / 4.5
 
 
 def color_map(image):
-    red = torch.sin(image * 20 + 100)
-    green = torch.sin(image * 30 + 125)
-    blue = torch.sin(image * 40 + 88)
+    if image.shape[-3] != 1:
+        return image
+    red = torch.sin(image * math.pi - math.pi * 0.0)
+    green = torch.sin(image * math.pi * 5.0 - math.pi * 0.0)
+    blue = torch.sin(image * math.pi * 9.0 - math.pi * 0.0)
 
     red = red * 0.5 + 0.5
     green = green * 0.5 + 0.5
     blue = blue * 0.5 + 0.5
     # green = data['depth']
     # blue = 1.0 - data['depth']
-    return torch.cat([red, green, blue], dim=1)
+    return torch.cat([red, green, blue], dim=-3)
 
 
 def visualize(data):
@@ -86,6 +85,8 @@ def visualize(data):
         data['color_map'] = color_map(cm)
     if 'depth' in data:
         data['depth_v'] = color_map(data['depth'])
+    if 'normal' in data:
+        data['normal_v'] = data['normal'] * 0.5 + 0.5
 
 
 def camera_scope(camera, shape):
