@@ -50,8 +50,10 @@ class Criteria(torch.nn.Module):
                 depth_down = torch.nn.functional.interpolate(
                             depth_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
                 normal_down, _ = util.normal(depth_down, camera)
-                normal_grad = torch.cat(util.sobel(normal_down), dim=1).abs().mean(dim=1, keepdim=True)
-                image_grad = torch.cat(util.sobel(image_down), dim=1).abs().mean(dim=1, keepdim=True)
+                normal_grad = torch.cat(util.sobel(normal_down), dim=1)\
+                    .abs().mean(dim=1, keepdim=True)
+                image_grad = torch.cat(util.sobel(image_down), dim=1)\
+                    .abs().mean(dim=1, keepdim=True)
                 image_grad_inv = torch.exp(-5.0 * image_grad * image_grad)
                 regular = normal_grad * image_grad_inv
                 data_out['grad_depth_down_%d' % i] = depth_down
