@@ -118,8 +118,10 @@ def train():
                 writer.add_image('image/depth_in', data_in['depth_v'][0], global_step=step)
             if 'depth_v' in data_out:
                 writer.add_image('image/depth_out', data_out['depth'][0], global_step=step)
+            if 'ground' in data_out:
+                writer.add_text('ground', str(data_out['ground'][0].data.cpu().numpy()), global_step=step)
             for key in data_out:
-                if key.startswith('base'):
+                if key.startswith('base_'):
                     writer.add_image('image/' + key, data_out[key][0], global_step=step)
                 elif key.startswith('residual_'):
                     writer.add_image('residual/' + key, data_out[key][0], global_step=step)

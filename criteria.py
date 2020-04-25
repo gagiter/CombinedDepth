@@ -43,17 +43,19 @@ class Criteria(torch.nn.Module):
             loss_regular = 0.0
             depth_down = depth_out
             image_down = image
-            normal_down = normal
             for i in range(self.down_times):
                 scale_factor = 1.0 if i == 0 else 0.5
                 image_down = torch.nn.functional.interpolate(
                         image_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
-                normal_down = torch.nn.functional.interpolate(
-                        normal_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
+                depth_down = torch.nn.functional.interpolate(
+                            depth_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
+                normal_down, _ = util.normal(depth_down, camera)
                 normal_grad = torch.cat(util.sobel(normal_down), dim=1).abs().mean(dim=1, keepdim=True)
                 image_grad = torch.cat(util.sobel(image_down), dim=1).abs().mean(dim=1, keepdim=True)
-                image_grad_inv = 1.0 - image_grad
+                image_grad_inv = torch.exp(-5.0 * image_grad * image_grad)
                 regular = normal_grad * image_grad_inv
+                data_out['grad_depth_down_%d' % i] = depth_down
+                data_out['grad_normal_down_%d' % i] = normal_down * 0.5 + 0.5
                 data_out['grad_normal_%d' % i] = normal_grad
                 data_out['grad_image_%d' % i] = image_grad
                 data_out['grad_image_inv_%d' % i] = image_grad_inv

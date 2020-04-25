@@ -3,6 +3,7 @@ import torch
 import torch.nn.functional as F
 import function
 import math
+import numpy as np
 
 
 def hit_plane(ground, camera, image):
@@ -22,7 +23,7 @@ def hit_plane(ground, camera, image):
 def normal(depth, camera):
     points = unproject(depth, camera)
     points = points[:, 0:3, ...] / (points[:, 3:4, ...] + 0.00001)
-    grad_x, grad_y = sobel(points)
+    grad_x, grad_y = sobel(points, padding=1)
     normals = cross(grad_x, grad_y)
     normals = torch.nn.functional.normalize(normals)
     return normals, points
@@ -36,24 +37,20 @@ def cross(a, b):
     return c
 
 
-def sobel(image):
-    channles = image.shape[1]
-    filter_x = torch.zeros([1, 1, 5, 5], dtype=torch.float, device=image.device)
-    filter_x[:, :, :, 0:1] = -0.5
-    filter_x[:, :, :, 1:2] = -1.0
-    filter_x[:, :, :, 3:4] = +1.0
-    filter_x[:, :, :, 4:5] = +0.5
-    filter_y = torch.zeros([1, 1, 5, 5], dtype=torch.float, device=image.device)
-    filter_y[:, :, 0:1, :] = -0.5
-    filter_y[:, :, 1:2, :] = -1.0
-    filter_y[:, :, 3:4, :] = +1.0
-    filter_y[:, :, 4:5, :] = +0.5
+def sobel(image, padding=False):
+    channles = image.shape[-3]
+    filter_x = np.array([[-0.25, 0.0, 0.25], [-0.5, 0.0, 0.5], [-0.25, 0.0, 0.25]],
+                        dtype=np.float32)
+    filter_x = torch.from_numpy(filter_x).to(image.device).reshape(1, 1, 3, 3)
+    filter_y = np.array([[-0.25, -0.5, -0.25], [0.0, 0.0, 0.0], [0.25, 0.5, 0.25]],
+                        dtype=np.float32)
+    filter_y = torch.from_numpy(filter_y).to(image.device).reshape(1, 1, 3, 3)
     filter_x = filter_x.repeat(channles, 1, 1, 1)
     filter_y = filter_y.repeat(channles, 1, 1, 1)
-
-    grad_x = F.conv2d(image, filter_x, padding=2, groups=channles)
-    grad_y = F.conv2d(image, filter_y, padding=2, groups=channles)
-    return grad_x / 7.5, grad_y / 7.5
+    p = 1 if padding else 0
+    grad_x = F.conv2d(image, filter_x, padding=p, groups=channles)
+    grad_y = F.conv2d(image, filter_y, padding=p, groups=channles)
+    return grad_x, grad_y
 
 
 def color_map(image):
