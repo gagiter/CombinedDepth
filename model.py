@@ -34,48 +34,39 @@ class Matrix(torch.nn.Module):
 
 
 class Model(torch.nn.Module):
-    def __init__(self, encoder='resnet34', depth_scale=1.0, rotation_scale=1.0, translation_scale=1.0, swap=False):
+    def __init__(self, encoder='resnet34', depth_scale=1.0, rotation_scale=1.0, translation_scale=1.0):
         super(Model, self).__init__()
         self.depth_net = Matrix(encoder, in_channels=3, out_channels=1)
         self.camera_net = Vector(encoder, in_channels=3, out_channels=9)
-        self.motion_net = Vector(encoder, in_channels=6, out_channels=6)
+        self.motion_net = Vector(encoder, in_channels=9, out_channels=12)
         self.depth_scale = depth_scale
         self.rotation_scale = rotation_scale
         self.translation_scale = translation_scale
-        self.swap = swap
 
     def forward(self, data):
         data_out = dict()
-        if self.swap and 'stereo' in data and random.random() > 0.5:
-            data_out['depth'] = self.depth_net(data['stereo'])
-            camera = self.camera_net(data['stereo'])
-            data['swap'] = True
-            # print('swap yes')
-        else:
-            data_out['depth'] = self.depth_net(data['image'])
-            camera = self.camera_net(data['image'])
-            data['swap'] = False
-            # print('swap no')
+        data_out['depth'] = self.depth_net(data['image'])
+        camera = self.camera_net(data['image'])
 
         data_out['camera'] = camera[:, 0:5] * 0.1
         ground_n = torch.nn.functional.normalize(camera[:, 5:8])
         ground_d = (camera[:, 8:9] + 0.5) * 2.0
         data_out['ground'] = torch.cat([ground_n, ground_d], dim=1)
 
-        for ref in ['stereo']:  # , 'previous', 'next'
-            if ref in data:
-                image = data['image']
-                image_ref = data[ref]
-                image_stack = torch.cat([image, image_ref], dim=1)
-                motion = self.motion_net(image_stack)
-                if self.rotation_scale > 0.0:
-                    motion[:, 0:3] *= self.rotation_scale
-                else:
-                    motion[:, 0:3] = torch.zeros_like(motion[:, 0:3])
-                if self.translation_scale > 0.0:
-                    motion[:, 3:6] *= self.translation_scale
-                else:
-                    motion[:, 3:6] = torch.zeros_like(motion[:, 3:6])
-                data_out['motion_' + ref] = motion
+        image_stack = torch.cat([data['previous'], data['image'], data['next']], dim=1)
+        motion = self.motion_net(image_stack)
+        if self.rotation_scale > 0.0:
+            motion[:, 0:3] *= self.rotation_scale
+            motion[:, 6:9] *= self.rotation_scale
+        else:
+            motion[:, 0:3] = torch.zeros_like(motion[:, 0:3])
+            motion[:, 6:9] = torch.zeros_like(motion[:, 6:9])
+        if self.translation_scale > 0.0:
+            motion[:, 3:6] *= self.translation_scale
+            motion[:, 9:12] *= self.translation_scale
+        else:
+            motion[:, 3:6] = torch.zeros_like(motion[:, 3:6])
+            motion[:, 9:12] = torch.zeros_like(motion[:, 9:12])
 
+        data_out['motion'] = motion
         return data_out

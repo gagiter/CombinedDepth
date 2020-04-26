@@ -39,7 +39,6 @@ parser.add_argument('--use_number', type=int, default=0)
 parser.add_argument('--target_pixels', type=int, default=300000)
 parser.add_argument('--target_width', type=int, default=640)
 parser.add_argument('--target_height', type=int, default=480)
-parser.add_argument('--swap', type=int, default=1)
 parser.add_argument('--resume', type=int, default=1)
 
 
@@ -58,7 +57,7 @@ def train():
 
     model = Model(args.encoder, rotation_scale=args.rotation_scale,
                   translation_scale=args.translation_scale,
-                  depth_scale=args.depth_scale, swap=(args.swap > 0))
+                  depth_scale=args.depth_scale)
 
     date_time = datetime.now().strftime("%Y_%m_%d_%H_%M_%S_")
     criteria = Criteria(
@@ -127,6 +126,8 @@ def train():
             for key in data_out:
                 if key.startswith('base_'):
                     writer.add_image('image/' + key, data_out[key][0], global_step=step)
+                elif key.startswith('image_'):
+                    writer.add_image('image/' + key, data_out[key][0], global_step=step)
                 elif key.startswith('residual_'):
                     writer.add_image('residual/' + key, data_out[key][0], global_step=step)
                 elif key.startswith('warp_'):
@@ -137,7 +138,7 @@ def train():
                     writer.add_image('ground/' + key, data_out[key][0], global_step=step)
                 elif key.startswith('loss'):
                     writer.add_scalar('loss/' + key, data_out[key], global_step=step)
-                elif key.startswith('motion_'):
+                elif key.startswith('motion'):
                     writer.add_text('motion/' + key, str(data_out[key][0].data.cpu().numpy()), global_step=step)
             losses = []
 

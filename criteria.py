@@ -18,8 +18,7 @@ class Criteria(torch.nn.Module):
 
     def forward(self, data_in, data_out):
         loss = 0.0
-        swap = data_in['swap']
-        image = data_in['stereo'] if swap else data_in['image']
+        image = data_in['image']
         camera = data_out['camera']
         ground = data_out['ground']
         depth_out = data_out['depth']
@@ -55,7 +54,7 @@ class Criteria(torch.nn.Module):
                     .abs().mean(dim=1, keepdim=True)
                 image_grad = torch.cat(util.sobel(image_down), dim=1)\
                     .abs().mean(dim=1, keepdim=True)
-                image_grad_inv = torch.exp(-5.0 * image_grad * image_grad)
+                image_grad_inv = torch.exp(-8.0 * image_grad * image_grad)
                 regular = normal_grad * image_grad_inv
                 data_out['grad_depth_down_%d' % i] = depth_down
                 data_out['grad_normal_down_%d' % i] = normal_down * 0.5 + 0.5
@@ -89,31 +88,45 @@ class Criteria(torch.nn.Module):
                     data_out['loss_depth'] = data_out['abs_rel'] * self.depth_weight
                 loss += data_out['loss_depth']
 
-        for ref in ['stereo']:  # , 'previous', 'next'
-            if ref in data_in and self.ref_weight > 0.0:
-                image_ref = data_in['image'] if swap else data_in[ref]
-                motion = data_out['motion_' + ref] * (-1.0 if swap else 1.0)
-                data_out['base_' + ref] = (image - image_ref).abs()
-                loss_ref = 0.0
-                image_down = image
-                image_ref_down = image_ref
-                depth_down = depth_out
-                for i in range(self.down_times):
-                    scale_factor = 1.0 if i == 0 else 0.5
-                    image_down = torch.nn.functional.interpolate(
-                        image_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
-                    image_ref_down = torch.nn.functional.interpolate(
-                        image_ref_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
-                    depth_down = torch.nn.functional.interpolate(
-                        depth_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
-                    warp = util.warp(image_ref_down, depth_down, camera, motion, self.occlusion)
-                    mask = warp > 0.0
-                    residual = (image_down * mask - warp).abs()
-                    data_out['residual_%s_%d' % (ref, i)] = residual
-                    data_out['warp_%s_%d' % (ref, i)] = warp
-                    loss_ref += residual.sum() / (mask.sum() + 1)
-                data_out['loss_' + ref] = loss_ref / self.down_times * self.ref_weight
-                loss += data_out['loss_' + ref]
+        if self.ref_weight > 0:
+            loss_previous = 0.0
+            loss_next = 0.0
+            data_out['base_previous'] = (image - data_in['previous']).abs()
+            data_out['base_next'] = (image - data_in['next']).abs()
+            data_out['image_previous'] = data_in['previous']
+            data_out['image_next'] = data_in['next']
+            image_down = data_in['image']
+            image_previous_down = data_in['previous']
+            image_next_down = data_in['next']
+            depth_down = data_out['depth']
+            motion_previous = data_out['motion'][:, 0:6]
+            motion_next = data_out['motion'][:, 6:12]
+            for i in range(self.down_times):
+                scale_factor = 1.0 if i == 0 else 0.5
+                image_down = torch.nn.functional.interpolate(
+                    image_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
+                image_previous_down = torch.nn.functional.interpolate(
+                    image_previous_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
+                image_next_down = torch.nn.functional.interpolate(
+                    image_next_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
+                depth_down = torch.nn.functional.interpolate(
+                    depth_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
+                warp_previous = util.warp(image_previous_down, depth_down, camera, motion_previous, self.occlusion)
+                warp_next = util.warp(image_next_down, depth_down, camera, motion_next, self.occlusion)
+                mask_previous = warp_previous > 0.0
+                mask_next = warp_next > 0.0
+                residual_previous = (image_down * mask_previous - warp_previous).abs()
+                residual_next = (image_down * mask_next - warp_next).abs()
+                data_out['residual_previous_%d' % i] = residual_previous
+                data_out['residual_next_%d' % i] = residual_next
+                data_out['warp_previous_%d' % i] = warp_previous
+                data_out['warp_next_%d' % i] = warp_next
+                loss_previous += residual_previous.sum() / (mask_previous.sum() + 1)
+                loss_next += residual_next.sum() / (mask_next.sum() + 1)
+            data_out['loss_previous'] = loss_previous / self.down_times * self.ref_weight
+            data_out['loss_next'] = loss_next / self.down_times * self.ref_weight
+            loss += data_out['loss_previous'] + data_out['loss_next']
 
         return loss
+
 

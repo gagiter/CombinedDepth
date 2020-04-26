@@ -33,9 +33,12 @@ class Data(Dataset):
                 with open(os.path.join(root, csv_name)) as csv_file:
                     csv_reader = csv.reader(csv_file)
                     keys = next(csv_reader)
+                    previous_id = keys.index('previous')
+                    next_id = keys.index('next')
                     for row in csv_reader:
-                        item = dict(zip(keys, row))
-                        self.data.append((root, item))
+                        if row[previous_id] != 'None' and row[next_id] != 'None':
+                            item = dict(zip(keys, row))
+                            self.data.append((root, item))
 
     def __len__(self):
         return len(self.data) if self.use_number == 0 else \
@@ -46,13 +49,11 @@ class Data(Dataset):
         item = self.data[idx][1]
         image = os.path.join(root, item['image'])
         depth = None if item['depth'] == 'None' else os.path.join(root, item['depth'])
-        ref = dict()
-        for ref_name in ['stereo']:  # , 'previous' ['stereo', 'previous', 'next']: # , 'previous', 'next'
-            ref[ref_name] = None if item[ref_name] == 'None' \
-                else os.path.join(root, item[ref_name])
+        refs = dict()
+        for ref_name in ['previous', 'next']:  # , 'previous' ['stereo', 'previous', 'next']: # , 'previous', 'next'
+            refs[ref_name] = os.path.join(root, item[ref_name])
 
         out = dict()
-        # print(image)
         image = Image.open(image)
         image = ImageOps.exif_transpose(image)
         if image.mode != 'RGB':
@@ -79,15 +80,14 @@ class Data(Dataset):
             depth[mask] = 1.0 / depth[mask]
             out['depth'] = depth
 
-        for ref_key in ref:
-            if ref[ref_key] is not None:
-                ref[ref_key] = Image.open(ref[ref_key])
-                ref[ref_key] = ImageOps.exif_transpose(ref[ref_key])
-                ref[ref_key] = TF.resize(ref[ref_key], (height, width))
-                if ref[ref_key].mode != 'RGB':
-                    ref[ref_key] = ref[ref_key].convert('RGB')
-                ref[ref_key] = TF.to_tensor(ref[ref_key])
-                out[ref_key] = ref[ref_key]
+        for ref_name in refs:
+            refs[ref_name] = Image.open(refs[ref_name])
+            refs[ref_name] = ImageOps.exif_transpose(refs[ref_name])
+            refs[ref_name] = TF.resize(refs[ref_name], (height, width))
+            if refs[ref_name].mode != 'RGB':
+                refs[ref_name] = refs[ref_name].convert('RGB')
+            refs[ref_name] = TF.to_tensor(refs[ref_name])
+            out[ref_name] = refs[ref_name]
 
         for out_item in out:
             out[out_item] = out[out_item].to(self.device)
