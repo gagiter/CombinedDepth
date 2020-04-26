@@ -53,7 +53,7 @@ class Model(torch.nn.Module):
         ground_d = (camera[:, 8:9] + 0.5) * 2.0
         data_out['ground'] = torch.cat([ground_n, ground_d], dim=1)
 
-        for ref in ['stereo', 'previous', 'next']:
+        for ref in ['stereo']:  # , 'previous', 'next'
             if ref in data:
                 image_ref = data[ref]
                 image_stack = torch.cat([image, image_ref], dim=1)

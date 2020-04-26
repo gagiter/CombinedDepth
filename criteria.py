@@ -59,7 +59,7 @@ class Criteria(torch.nn.Module):
                 data_out['grad_depth_down_%d' % i] = depth_down
                 data_out['grad_normal_down_%d' % i] = normal_down * 0.5 + 0.5
                 data_out['grad_normal_%d' % i] = normal_grad
-                data_out['grad_image_%d' % i] = image_grad
+                # data_out['grad_image_%d' % i] = image_grad
                 data_out['grad_image_inv_%d' % i] = image_grad_inv
                 data_out['grad_regular_%d' % i] = regular
                 loss_regular += regular.mean()
@@ -85,7 +85,7 @@ class Criteria(torch.nn.Module):
                     data_out['loss_depth'] = data_out['abs_rel'] * self.depth_weight
                 loss += data_out['loss_depth']
 
-        for ref in ['stereo', 'previous', 'next']:
+        for ref in ['stereo']:  # , 'previous', 'next'
             if ref in data_in and self.ref_weight > 0.0:
                 image_ref = data_in[ref]
                 motion = data_out['motion_' + ref]
