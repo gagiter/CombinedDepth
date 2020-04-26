@@ -39,7 +39,9 @@ parser.add_argument('--use_number', type=int, default=0)
 parser.add_argument('--target_pixels', type=int, default=300000)
 parser.add_argument('--target_width', type=int, default=640)
 parser.add_argument('--target_height', type=int, default=480)
+parser.add_argument('--swap', type=int, default=1)
 parser.add_argument('--resume', type=int, default=1)
+
 
 args = parser.parse_args()
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
@@ -51,7 +53,7 @@ def train():
 
     train_data = dataset.Data(args.data_root, target_pixels=args.target_pixels,
                               target_width=args.target_width, target_height=args.target_height,
-                              use_number=args.use_number, device=device)
+                              swap=args.swap, use_number=args.use_number, device=device)
     train_loader = DataLoader(train_data, batch_size=args.mini_batch_size, shuffle=True)
 
     model = Model(args.encoder, rotation_scale=args.rotation_scale,

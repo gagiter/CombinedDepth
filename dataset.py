@@ -11,13 +11,14 @@ from PIL import ImageOps
 
 class Data(Dataset):
     def __init__(self, data_root, target_pixels=350000,
-                 target_width=640, target_height=480, use_number=0,
+                 target_width=640, target_height=480, swap=False, use_number=0,
                  mode='train', device='cpu', shuffle=True):
         super(Data, self).__init__()
         self.data_root = data_root
         self.target_pixels = target_pixels
         self.target_width = target_width
         self.target_height = target_height
+        self.swap = swap
         self.use_number = use_number
         self.mode = mode
         self.device = device
@@ -47,7 +48,7 @@ class Data(Dataset):
         image = os.path.join(root, item['image'])
         depth = None if item['depth'] == 'None' else os.path.join(root, item['depth'])
         ref = dict()
-        for ref_name in ['stereo', 'previous', 'next']:  # , 'previous' ['stereo', 'previous', 'next']:
+        for ref_name in ['stereo']:  # , 'previous' ['stereo', 'previous', 'next']: # , 'previous', 'next'
             ref[ref_name] = None if item[ref_name] == 'None' \
                 else os.path.join(root, item[ref_name])
 
@@ -68,7 +69,7 @@ class Data(Dataset):
         image = TF.to_tensor(image)
         out['image'] = image
 
-        if depth:
+        if depth is not None:
             depth = Image.open(depth)
             depth = ImageOps.exif_transpose(depth)
             depth = TF.resize(depth, (height, width), Image.NEAREST)
@@ -88,6 +89,11 @@ class Data(Dataset):
                     ref[ref_key] = ref[ref_key].convert('RGB')
                 ref[ref_key] = TF.to_tensor(ref[ref_key])
                 out[ref_key] = ref[ref_key]
+
+        if self.swap > 0 and random.random() > 0.5:
+            temp = out['image']
+            out['image'] = out['stereo']
+            out['stereo'] = temp
 
         for out_item in out:
             out[out_item] = out[out_item].to(self.device)
