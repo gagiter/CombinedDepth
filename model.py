@@ -2,7 +2,8 @@ import torch.nn
 import torch
 # import segmentation_models_pytorch as smp
 import smp
-import net
+# import net
+import random
 
 
 class Vector(torch.nn.Module):
@@ -33,7 +34,7 @@ class Matrix(torch.nn.Module):
 
 
 class Model(torch.nn.Module):
-    def __init__(self, encoder='resnet34', depth_scale=1.0, rotation_scale=1.0, translation_scale=1.0):
+    def __init__(self, encoder='resnet34', depth_scale=1.0, rotation_scale=1.0, translation_scale=1.0, swap=False):
         super(Model, self).__init__()
         self.depth_net = Matrix(encoder, in_channels=3, out_channels=1)
         self.camera_net = Vector(encoder, in_channels=3, out_channels=9)
@@ -41,12 +42,20 @@ class Model(torch.nn.Module):
         self.depth_scale = depth_scale
         self.rotation_scale = rotation_scale
         self.translation_scale = translation_scale
+        self.swap = swap
 
     def forward(self, data):
         data_out = dict()
-        image = data['image']
-        data_out['depth'] = self.depth_net(image)
-        camera = self.camera_net(image)
+        if self.swap and 'stereo' in data and random.random() > 0.5:
+            data_out['depth'] = self.depth_net(data['stereo'])
+            camera = self.camera_net(data['stereo'])
+            data['swap'] = True
+            # print('swap yes')
+        else:
+            data_out['depth'] = self.depth_net(data['image'])
+            camera = self.camera_net(data['image'])
+            data['swap'] = False
+            # print('swap no')
 
         data_out['camera'] = camera[:, 0:5] * 0.1
         ground_n = torch.nn.functional.normalize(camera[:, 5:8])
@@ -55,6 +64,7 @@ class Model(torch.nn.Module):
 
         for ref in ['stereo']:  # , 'previous', 'next'
             if ref in data:
+                image = data['image']
                 image_ref = data[ref]
                 image_stack = torch.cat([image, image_ref], dim=1)
                 motion = self.motion_net(image_stack)

@@ -18,7 +18,8 @@ class Criteria(torch.nn.Module):
 
     def forward(self, data_in, data_out):
         loss = 0.0
-        image = data_in['image']
+        swap = data_in['swap']
+        image = data_in['stereo'] if swap else data_in['image']
         camera = data_out['camera']
         ground = data_out['ground']
         depth_out = data_out['depth']
@@ -73,8 +74,11 @@ class Criteria(torch.nn.Module):
             mask = depth_in > (1.0 / 100.0)
             residual_depth = torch.zeros_like(depth_in)
             residual_depth[mask] = depth_in[mask] - depth_out[mask]
+            global_scale = depth_in[mask].mean() / depth_out[mask].mean()
             abs_rel = 1.0 - (depth_in[mask]/depth_out[mask])
+            abs_rel_global = 1.0 - (depth_in[mask] / depth_out[mask] / global_scale)
             data_out['abs_rel'] = abs_rel.abs().mean()
+            data_out['abs_rel_global'] = abs_rel_global.abs().mean()
             if self.depth_weight > 0.0:
                 data_out['residual_depth'] = residual_depth.abs()
                 data_out['abs_rel_global'] = \
@@ -87,8 +91,8 @@ class Criteria(torch.nn.Module):
 
         for ref in ['stereo']:  # , 'previous', 'next'
             if ref in data_in and self.ref_weight > 0.0:
-                image_ref = data_in[ref]
-                motion = data_out['motion_' + ref]
+                image_ref = data_in['image'] if swap else data_in[ref]
+                motion = data_out['motion_' + ref] * (-1.0 if swap else 1.0)
                 data_out['base_' + ref] = (image - image_ref).abs()
                 loss_ref = 0.0
                 image_down = image

@@ -53,12 +53,12 @@ def train():
 
     train_data = dataset.Data(args.data_root, target_pixels=args.target_pixels,
                               target_width=args.target_width, target_height=args.target_height,
-                              swap=args.swap, use_number=args.use_number, device=device)
+                              use_number=args.use_number, device=device)
     train_loader = DataLoader(train_data, batch_size=args.mini_batch_size, shuffle=True)
 
     model = Model(args.encoder, rotation_scale=args.rotation_scale,
                   translation_scale=args.translation_scale,
-                  depth_scale=args.depth_scale)
+                  depth_scale=args.depth_scale, swap=(args.swap > 0))
 
     date_time = datetime.now().strftime("%Y_%m_%d_%H_%M_%S_")
     criteria = Criteria(
@@ -111,6 +111,8 @@ def train():
             util.visualize(data_out)
             if 'abs_rel' in data_out:
                 writer.add_scalar('eval/abs_rel', data_out['abs_rel'], global_step=step)
+            if 'abs_rel_global' in data_out:
+                writer.add_scalar('eval/abs_rel_global', data_out['abs_rel_global'], global_step=step)
             writer.add_scalar('loss', loss, global_step=step)
             writer.add_image('image/image', data_in['image'][0], global_step=step)
             writer.add_image('image/color_map', data_in['color_map'][0], global_step=step)

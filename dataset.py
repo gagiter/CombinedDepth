@@ -11,14 +11,13 @@ from PIL import ImageOps
 
 class Data(Dataset):
     def __init__(self, data_root, target_pixels=350000,
-                 target_width=640, target_height=480, swap=False, use_number=0,
+                 target_width=640, target_height=480, use_number=0,
                  mode='train', device='cpu', shuffle=True):
         super(Data, self).__init__()
         self.data_root = data_root
         self.target_pixels = target_pixels
         self.target_width = target_width
         self.target_height = target_height
-        self.swap = swap
         self.use_number = use_number
         self.mode = mode
         self.device = device
@@ -89,11 +88,6 @@ class Data(Dataset):
                     ref[ref_key] = ref[ref_key].convert('RGB')
                 ref[ref_key] = TF.to_tensor(ref[ref_key])
                 out[ref_key] = ref[ref_key]
-
-        if self.swap > 0 and random.random() > 0.5:
-            temp = out['image']
-            out['image'] = out['stereo']
-            out['stereo'] = temp
 
         for out_item in out:
             out[out_item] = out[out_item].to(self.device)
