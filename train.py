@@ -27,7 +27,6 @@ parser.add_argument('--summary_freq', type=int, default=100)
 parser.add_argument('--save_freq', type=int, default=100)
 parser.add_argument('--ref_weight', type=float, default=1.0)
 parser.add_argument('--depth_weight', type=float, default=1.0)
-parser.add_argument('--global_depth', type=int, default=1)
 parser.add_argument('--regular_weight', type=float, default=1.0)
 parser.add_argument('--ground_weight', type=float, default=1.0)
 parser.add_argument('--depth_scale', type=float, default=1.0)
@@ -67,7 +66,6 @@ def train():
         ground_weight=args.ground_weight,
         down_times=args.down_times,
         occlusion=True if args.occlusion > 0 else False,
-        global_depth=args.global_depth
     )
     pcd = o3d.geometry.PointCloud()
 
@@ -108,10 +106,6 @@ def train():
             print('step:%d loss:%f' % (step, loss))
             util.visualize(data_in)
             util.visualize(data_out)
-            if 'abs_rel' in data_out:
-                writer.add_scalar('eval/abs_rel', data_out['abs_rel'], global_step=step)
-            if 'abs_rel_global' in data_out:
-                writer.add_scalar('eval/abs_rel_global', data_out['abs_rel_global'], global_step=step)
             writer.add_scalar('loss', loss, global_step=step)
             writer.add_image('image/image', data_in['image'][0], global_step=step)
             writer.add_image('image/color_map', data_in['color_map'][0], global_step=step)
@@ -138,6 +132,8 @@ def train():
                     writer.add_image('ground/' + key, data_out[key][0], global_step=step)
                 elif key.startswith('loss'):
                     writer.add_scalar('loss/' + key, data_out[key], global_step=step)
+                elif key.startswith('eval'):
+                    writer.add_scalar('eval/' + key, data_out[key], global_step=step)
                 elif key.startswith('motion'):
                     writer.add_text('motion/' + key, str(data_out[key][0].data.cpu().numpy()), global_step=step)
             losses = []

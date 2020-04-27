@@ -5,8 +5,7 @@ import util
 
 class Criteria(torch.nn.Module):
     def __init__(self, depth_weight=1.0, regular_weight=1.0,
-                 ref_weight=1.0, ground_weight=1.0, down_times=4, occlusion=True,
-                 global_depth=1):
+                 ref_weight=1.0, ground_weight=1.0, down_times=4, occlusion=True):
         super(Criteria, self).__init__()
         self.regular_weight = regular_weight
         self.ref_weight = ref_weight
@@ -14,7 +13,6 @@ class Criteria(torch.nn.Module):
         self.ground_weight = ground_weight
         self.down_times = down_times
         self.occlusion = occlusion
-        self.global_depth = global_depth
 
     def forward(self, data_in, data_out):
         loss = 0.0
@@ -28,7 +26,6 @@ class Criteria(torch.nn.Module):
 
         if self.ground_weight > 0.0:
             hit = util.hit_plane(ground, camera, image)
-            # ground_residual = ground[:3].dot(normal) * (hit - depth_out).abs()
             data_out['ground_hit'] = hit
             ground_dot = ground[:, 0:3].reshape(-1, 3, 1, 1)
             ground_dot = (ground_dot * normal).sum(dim=1, keepdim=True)
@@ -59,7 +56,6 @@ class Criteria(torch.nn.Module):
                 data_out['grad_depth_down_%d' % i] = depth_down
                 data_out['grad_normal_down_%d' % i] = normal_down * 0.5 + 0.5
                 data_out['grad_normal_%d' % i] = normal_grad
-                # data_out['grad_image_%d' % i] = image_grad
                 data_out['grad_image_inv_%d' % i] = image_grad_inv
                 data_out['grad_regular_%d' % i] = regular
                 loss_regular += regular.mean()
@@ -71,21 +67,20 @@ class Criteria(torch.nn.Module):
             depth_in = data_in['depth']
             depth_out = data_out['depth']
             mask = depth_in > (1.0 / 100.0)
-            residual_depth = torch.zeros_like(depth_in)
-            residual_depth[mask] = depth_in[mask] - depth_out[mask]
-            global_scale = depth_in[mask].mean() / depth_out[mask].mean()
-            abs_rel = 1.0 - (depth_in[mask]/depth_out[mask])
-            abs_rel_global = 1.0 - (depth_in[mask] / depth_out[mask] / global_scale)
-            data_out['abs_rel'] = abs_rel.abs().mean()
-            data_out['abs_rel_global'] = abs_rel_global.abs().mean()
+            abs_rel = 1.0 - depth_in[mask]/depth_out[mask]
+            data_out['eval_abs_rel'] = abs_rel.abs().mean()
+
+            z_in = 1.0 / depth_in[mask]
+            z_out = 1.0 / depth_out[mask]
+            global_scale = z_in.mean() / z_out.mean()
+            abs_rel_global = 1.0 - z_out * global_scale / z_in
+            data_out['eval_abs_rel_global'] = abs_rel_global.abs().mean()
+
             if self.depth_weight > 0.0:
+                residual_depth = torch.zeros_like(depth_in)
+                residual_depth[mask] = depth_in[mask] - depth_out[mask]
                 data_out['residual_depth'] = residual_depth.abs()
-                data_out['abs_rel_global'] = \
-                    (1.0 - depth_in[mask].mean() / depth_out[mask].mean()).abs()
-                if self.global_depth:
-                    data_out['loss_depth'] = data_out['abs_rel_global'] * self.depth_weight
-                else:
-                    data_out['loss_depth'] = data_out['abs_rel'] * self.depth_weight
+                data_out['loss_depth'] = data_out['abs_rel'] * self.depth_weight
                 loss += data_out['loss_depth']
 
         if self.ref_weight > 0:
