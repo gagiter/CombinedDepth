@@ -66,21 +66,31 @@ class Criteria(torch.nn.Module):
         if 'depth' in data_in:
             depth_in = data_in['depth']
             depth_out = data_out['depth']
-            mask = depth_in > (1.0 / 100.0)
-            abs_rel = 1.0 - depth_in[mask]/depth_out[mask]
-            data_out['eval_abs_rel'] = abs_rel.abs().mean()
+            mask = depth_in > (1.0 / 50.0)
+            mask &= depth_out > (1.0 / 50.0)
 
-            z_in = 1.0 / depth_in[mask]
-            z_out = 1.0 / depth_out[mask]
-            global_scale = z_in.mean() / z_out.mean()
-            abs_rel_global = 1.0 - z_out * global_scale / z_in
-            data_out['eval_abs_rel_global'] = abs_rel_global.abs().mean()
+            residual_abs_rel = torch.zeros_like(depth_in)
+            residual_abs_rel[mask] = (1.0 - depth_in[mask] / depth_out[mask]).abs()
+            data_out['residual_abs_rel'] = residual_abs_rel
+            data_out['eval_abs_rel'] = residual_abs_rel.sum() / mask.sum()
+
+            z_in = torch.zeros_like(depth_in)
+            z_out = torch.zeros_like(depth_out)
+            z_in[mask] = 1.0 / depth_in[mask]
+            z_out[mask] = 1.0 / depth_out[mask]
+            z_in_mean = z_in.sum(dim=(1, 2, 3), keepdim=True) / mask.sum(dim=(1, 2, 3), keepdim=True)
+            z_out_mean = z_out.sum(dim=(1, 2, 3), keepdim=True) / mask.sum(dim=(1, 2, 3), keepdim=True)
+            global_scale = z_in_mean / z_out_mean
+            depth_in *= global_scale
+            residual_abs_rel_global = torch.zeros_like(depth_in)
+            residual_abs_rel_global[mask] = (1.0 - depth_in[mask] / depth_out[mask]).abs()
+
+            data_out['residual_abs_rel_global'] = residual_abs_rel_global
+            data_out['eval_abs_rel_global'] = residual_abs_rel_global.sum() / mask.sum()
+            data_out['eval_global_scale'] = global_scale.mean()
 
             if self.depth_weight > 0.0:
-                residual_depth = torch.zeros_like(depth_in)
-                residual_depth[mask] = depth_in[mask] - depth_out[mask]
-                data_out['residual_depth'] = residual_depth.abs()
-                data_out['loss_depth'] = data_out['abs_rel'] * self.depth_weight
+                data_out['loss_depth'] = data_out['eval_abs_rel'] * self.depth_weight
                 loss += data_out['loss_depth']
 
         if self.ref_weight > 0:

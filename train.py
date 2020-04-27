@@ -112,7 +112,7 @@ def train():
             writer.add_image('image/normal', data_out['normal_v'][0], global_step=step)
             writer.add_text('camera', str(data_out['camera'][0].data.cpu().numpy()), global_step=step)
             if 'depth_v' in data_in:
-                writer.add_image('image/depth_in', data_in['depth_v'][0], global_step=step)
+                writer.add_image('image/depth_in', data_in['depth'][0], global_step=step)
             if 'depth_v' in data_out:
                 writer.add_image('image/depth_out', data_out['depth'][0], global_step=step)
             if 'ground' in data_out:
@@ -132,7 +132,7 @@ def train():
                     writer.add_image('ground/' + key, data_out[key][0], global_step=step)
                 elif key.startswith('loss'):
                     writer.add_scalar('loss/' + key, data_out[key], global_step=step)
-                elif key.startswith('eval'):
+                elif key.startswith('eval_'):
                     writer.add_scalar('eval/' + key, data_out[key], global_step=step)
                 elif key.startswith('motion'):
                     writer.add_text('motion/' + key, str(data_out[key][0].data.cpu().numpy()), global_step=step)
