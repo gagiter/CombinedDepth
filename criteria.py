@@ -5,12 +5,13 @@ import util
 
 class Criteria(torch.nn.Module):
     def __init__(self, depth_weight=1.0, regular_weight=1.0,
-                 ref_weight=1.0, ground_weight=1.0, down_times=4, occlusion=True):
+                 ref_weight=1.0, ground_weight=1.0, scale_weight=1.0, down_times=4, occlusion=True):
         super(Criteria, self).__init__()
         self.regular_weight = regular_weight
         self.ref_weight = ref_weight
         self.depth_weight = depth_weight
         self.ground_weight = ground_weight
+        self.scale_weight = scale_weight
         self.down_times = down_times
         self.occlusion = occlusion
 
@@ -23,6 +24,19 @@ class Criteria(torch.nn.Module):
         normal, points = util.normal(depth_out, camera)
         data_out['normal'] = normal
         data_out['points'] = points
+
+        if self.scale_weight > 0.0 and 'distance_previous' in data_in and 'distance_previous' in data_in:
+            motion = data_out['motion']
+            distance_previous_in = data_in['distance_previous']
+            distance_previous_out = torch.norm(motion[:, 3:6], dim=1, keepdim=True)
+            loss_scale_previous = (distance_previous_in - distance_previous_out).abs().mean()
+            distance_next_in = data_in['distance_next']
+            distance_next_out = torch.norm(motion[:, 9:12], dim=1, keepdim=True)
+            loss_scale_next = (distance_next_in - distance_next_out).abs().mean()
+            data_out['loss_scale_previous'] = loss_scale_previous
+            data_out['loss_scale_next'] = loss_scale_next
+            data_out['loss_scale'] = (loss_scale_previous + loss_scale_next) * self.scale_weight
+            loss += data_out['loss_scale']
 
         if self.ground_weight > 0.0:
             hit = util.hit_plane(ground, camera, image)
@@ -66,8 +80,8 @@ class Criteria(torch.nn.Module):
         if 'depth' in data_in:
             depth_in = data_in['depth']
             depth_out = data_out['depth']
-            mask = depth_in > (1.0 / 50.0)
-            mask &= depth_out > (1.0 / 50.0)
+            mask = depth_in > (1.0 / 80.0)
+            mask &= depth_out > (1.0 / 80.0)
 
             residual_abs_rel = torch.zeros_like(depth_in)
             residual_abs_rel[mask] = (1.0 - depth_in[mask] / depth_out[mask]).abs()

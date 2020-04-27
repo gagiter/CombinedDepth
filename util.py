@@ -201,6 +201,57 @@ def project(points, camera, motion):
     return uv
 
 
+class GPS:
+    EarthRadius = 6378137.0
+    e2 = 0.00669437999013
+
+    def __init__(self):
+        self.origin = [0.0, 0.0, 0.0]
+        self.has_origin = False
+
+    def set_origin(self, latitude, longitude, altitude):
+
+        sin_latitude = math.sin(math.pi * latitude / 180.0)
+        cos_latitude = math.cos(math.pi * latitude / 180.0)
+        sin_longitude = math.sin(math.pi * longitude / 180.0)
+        cos_longitude = math.cos(math.pi * longitude / 180.0)
+        N = self.EarthRadius /\
+                 (math.sqrt(1.0 - self.e2 * math.pow(sin_latitude, 2)))
+
+        self.origin[0] = (N + altitude) * cos_latitude * cos_longitude
+        self.origin[1] = (N + altitude) * cos_latitude * sin_longitude
+        self.origin[2] = (N + (1.0 - self.e2) + altitude) * sin_latitude
+        self.has_origin = True
+
+    def lla2enu(self, latitude, longitude, altitude):
+
+        if not self.has_origin:
+            self.set_origin(latitude, longitude, altitude)
+        sin_latitude = math.sin(math.pi * latitude / 180.0)
+        cos_latitude = math.cos(math.pi * latitude / 180.0)
+        sin_longitude = math.sin(math.pi * longitude / 180.0)
+        cos_longitude = math.cos(math.pi * longitude / 180.0)
+        N = self.EarthRadius / \
+                 (math.sqrt(1.0 - self.e2 * math.pow(sin_latitude, 2)))
+
+        X = [0.0, 0.0, 0.0]
+        X[0] = (N + altitude) * cos_latitude * cos_longitude
+        X[1] = (N + altitude) * cos_latitude * sin_longitude
+        X[2] = (N + (1.0 - self.e2) + altitude) * sin_latitude
+
+        enu = [0.0, 0.0, 0.0]
+
+        enu[0] = -sin_longitude * (X[0] - self.origin[0]) + cos_longitude * (X[1] - self.origin[1])
+        enu[1] = -sin_latitude * cos_longitude * (X[0] - self.origin[0]) - \
+            sin_longitude * sin_latitude * (X[1] - self.origin[1]) + \
+            cos_latitude * (X[2] - self.origin[2])
+        enu[2] = cos_latitude * cos_longitude * (X[0] - self.origin[0]) + \
+            cos_latitude * sin_longitude * (X[1] - self.origin[1]) + \
+            sin_latitude * (X[2] - self.origin[2])
+
+        return enu
+
+
 if __name__ == '__main__':
     image = torch.rand([2, 3, 128, 256], device='cuda:0')
     depth = torch.rand([2, 1, 128, 256], device='cuda:0')

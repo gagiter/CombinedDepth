@@ -29,6 +29,7 @@ parser.add_argument('--ref_weight', type=float, default=1.0)
 parser.add_argument('--depth_weight', type=float, default=1.0)
 parser.add_argument('--regular_weight', type=float, default=1.0)
 parser.add_argument('--ground_weight', type=float, default=1.0)
+parser.add_argument('--scale_weight', type=float, default=1.0)
 parser.add_argument('--depth_scale', type=float, default=1.0)
 parser.add_argument('--rotation_scale', type=float, default=0.5)
 parser.add_argument('--translation_scale', type=float, default=2.0)
@@ -64,6 +65,7 @@ def train():
         regular_weight=args.regular_weight,
         ref_weight=args.ref_weight,
         ground_weight=args.ground_weight,
+        scale_weight=args.scale_weight,
         down_times=args.down_times,
         occlusion=True if args.occlusion > 0 else False,
     )

@@ -1,5 +1,6 @@
 
 import os
+import torch
 from torch.utils.data import Dataset
 from PIL import Image
 import torchvision.transforms.functional as TF
@@ -7,6 +8,9 @@ import csv
 import math
 import random
 from PIL import ImageOps
+import util
+import numpy as np
+
 
 
 class Data(Dataset):
@@ -88,6 +92,17 @@ class Data(Dataset):
                 refs[ref_name] = refs[ref_name].convert('RGB')
             refs[ref_name] = TF.to_tensor(refs[ref_name])
             out[ref_name] = refs[ref_name]
+
+        if item['GPS'] != 'None' and item['GPS_previous'] != 'None' and item['GPS_next'] != 'None':
+            gps = util.GPS()
+            lla_image = [float(i) for i in item['GPS'].split()]
+            gps.set_origin(*lla_image)
+            lla_previous = [float(i) for i in item['GPS_previous'].split()]
+            distance_previous = np.linalg.norm(np.array(gps.lla2enu(*lla_previous)), keepdims=True)
+            lla_next = [float(i) for i in item['GPS_next'].split()]
+            distance_next = np.linalg.norm(np.array(gps.lla2enu(*lla_next)), keepdims=True)
+            out['distance_previous'] = torch.from_numpy(distance_previous.astype(np.float32))
+            out['distance_next'] = torch.from_numpy(distance_next.astype(np.float32))
 
         for out_item in out:
             out[out_item] = out[out_item].to(self.device)
