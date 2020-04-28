@@ -37,7 +37,7 @@ class Model(torch.nn.Module):
     def __init__(self, encoder='resnet34', depth_scale=1.0, rotation_scale=1.0, translation_scale=1.0):
         super(Model, self).__init__()
         self.depth_net = Matrix(encoder, in_channels=3, out_channels=1)
-        self.camera_net = Vector(encoder, in_channels=3, out_channels=9)
+        self.camera_net = Vector(encoder, in_channels=3, out_channels=10)
         self.motion_net = Vector(encoder, in_channels=9, out_channels=12)
         self.depth_scale = depth_scale
         self.rotation_scale = rotation_scale
@@ -52,6 +52,7 @@ class Model(torch.nn.Module):
         ground_n = torch.nn.functional.normalize(camera[:, 5:8])
         ground_d = (camera[:, 8:9] + 0.5) * 2.0
         data_out['ground'] = torch.cat([ground_n, ground_d], dim=1)
+        data_out['scale'] = (camera[:, 9:10] + 0.5) * 10.0
 
         image_stack = torch.cat([data['previous'], data['image'], data['next']], dim=1)
         motion = self.motion_net(image_stack)

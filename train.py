@@ -114,9 +114,9 @@ def train():
             writer.add_image('image/normal', data_out['normal_v'][0], global_step=step)
             writer.add_text('camera', str(data_out['camera'][0].data.cpu().numpy()), global_step=step)
             if 'depth_v' in data_in:
-                writer.add_image('image/depth_in', data_in['depth_v'][0], global_step=step)
+                writer.add_image('image/depth_in', data_in['depth'][0], global_step=step)
             if 'depth_v' in data_out:
-                writer.add_image('image/depth_out', data_out['depth_v'][0], global_step=step)
+                writer.add_image('image/depth_out', data_out['depth'][0], global_step=step)
             if 'ground' in data_out:
                 writer.add_text('ground', str(data_out['ground'][0].data.cpu().numpy()), global_step=step)
             for key in data_out:

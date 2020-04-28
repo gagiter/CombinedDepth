@@ -5,7 +5,8 @@ import util
 
 class Criteria(torch.nn.Module):
     def __init__(self, depth_weight=1.0, regular_weight=1.0,
-                 ref_weight=1.0, ground_weight=1.0, scale_weight=1.0, down_times=4, occlusion=True):
+                 ref_weight=1.0, ground_weight=1.0, scale_weight=1.0, down_times=4,
+                 scale_epsilon=1.0, occlusion=True):
         super(Criteria, self).__init__()
         self.regular_weight = regular_weight
         self.ref_weight = ref_weight
@@ -13,6 +14,7 @@ class Criteria(torch.nn.Module):
         self.ground_weight = ground_weight
         self.scale_weight = scale_weight
         self.down_times = down_times
+        self.scale_epsilon = scale_epsilon
         self.occlusion = occlusion
 
     def forward(self, data_in, data_out):
@@ -27,16 +29,26 @@ class Criteria(torch.nn.Module):
 
         if self.scale_weight > 0.0 and 'distance_previous' in data_in and 'distance_previous' in data_in:
             motion = data_out['motion']
-            distance_previous_in = data_in['distance_previous']
-            distance_previous_out = torch.norm(motion[:, 3:6], dim=1, keepdim=True)
-            loss_scale_previous = (distance_previous_in - distance_previous_out).abs().mean()
-            distance_next_in = data_in['distance_next']
-            distance_next_out = torch.norm(motion[:, 9:12], dim=1, keepdim=True)
-            loss_scale_next = (distance_next_in - distance_next_out).abs().mean()
-            data_out['loss_scale_previous'] = loss_scale_previous
-            data_out['loss_scale_next'] = loss_scale_next
-            data_out['loss_scale'] = (loss_scale_previous + loss_scale_next) * self.scale_weight
-            loss += data_out['loss_scale']
+            scale = data_out['scale']
+            data_out['eval_scale'] = scale.mean()
+            # distance previous
+            dp_in = data_in['distance_previous']
+            mask = dp_in > 0.5
+            dp_out = torch.norm(motion[:, 3:6].detach(), dim=1, keepdim=True)
+            loss_scale_previous = (1.0 - dp_out[mask] * scale[mask] / dp_in[mask]).abs().mean()
+            data_out['loss_scale_previous'] = loss_scale_previous * self.scale_weight
+            loss += data_out['loss_scale_previous']
+            data_out['eval_dp_in'] = dp_in[mask].mean()
+            data_out['eval_dp_out'] = dp_out[mask].mean()
+            # distance next
+            dn_in = data_in['distance_next']
+            mask = dn_in > 0.5
+            dn_out = torch.norm(motion[:, 9:12].detach(), dim=1, keepdim=True)
+            loss_scale_next = (1.0 - dn_out[mask] * scale[mask] / dp_in[mask]).abs().mean()
+            data_out['loss_scale_next'] = loss_scale_next * self.scale_weight
+            loss += data_out['loss_scale_next']
+            data_out['eval_dn_in'] = dn_in[mask].mean()
+            data_out['eval_dn_out'] = dn_out[mask].mean()
 
         if self.ground_weight > 0.0:
             hit = util.hit_plane(ground, camera, image)
@@ -80,28 +92,24 @@ class Criteria(torch.nn.Module):
         if 'depth' in data_in:
             depth_in = data_in['depth']
             depth_out = data_out['depth']
+            scale = data_out['scale'].reshape(-1, 1, 1, 1)
             mask = depth_in > (1.0 / 80.0)
             mask &= depth_out > (1.0 / 80.0)
-
-            residual_abs_rel = torch.zeros_like(depth_in)
-            residual_abs_rel[mask] = (1.0 - depth_in[mask] / depth_out[mask]).abs()
-            data_out['residual_abs_rel'] = residual_abs_rel
-            data_out['eval_abs_rel'] = residual_abs_rel.sum() / mask.sum()
-
             z_in = torch.zeros_like(depth_in)
             z_out = torch.zeros_like(depth_out)
             z_in[mask] = 1.0 / depth_in[mask]
             z_out[mask] = 1.0 / depth_out[mask]
-            z_in_mean = z_in.sum(dim=(1, 2, 3), keepdim=True) / mask.sum(dim=(1, 2, 3), keepdim=True)
-            z_out_mean = z_out.sum(dim=(1, 2, 3), keepdim=True) / mask.sum(dim=(1, 2, 3), keepdim=True)
-            global_scale = z_in_mean / z_out_mean
-            # depth_in *= global_scale
-            residual_abs_rel_global = torch.zeros_like(depth_in)
-            residual_abs_rel_global[mask] = (1.0 - (depth_in * global_scale)[mask] / depth_out[mask]).abs()
 
-            data_out['residual_abs_rel_global'] = residual_abs_rel_global
-            data_out['eval_abs_rel_global'] = residual_abs_rel_global.sum() / mask.sum()
-            data_out['eval_global_scale'] = global_scale.mean()
+            residual_abs_rel = torch.zeros_like(depth_in)
+            residual_abs_rel[mask] = (1.0 - z_out[mask] / z_in[mask]).abs()
+            data_out['residual_abs_rel'] = residual_abs_rel
+            data_out['eval_abs_rel'] = residual_abs_rel.sum() / mask.sum()
+
+            residual_abs_rel_scaled = torch.zeros_like(depth_in)
+            residual_abs_rel_scaled[mask] = (1.0 - (z_out * scale)[mask] / z_in[mask]).abs()
+            data_out['residual_abs_rel_scaled'] = residual_abs_rel_scaled
+            data_out['eval_abs_rel_scaled'] = residual_abs_rel_scaled.sum() / mask.sum()
+            data_out['eval_scale'] = scale.mean()
 
             if self.depth_weight > 0.0:
                 data_out['loss_depth'] = data_out['eval_abs_rel'] * self.depth_weight
