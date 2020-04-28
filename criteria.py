@@ -34,33 +34,44 @@ class Criteria(torch.nn.Module):
             # distance previous
             dp_in = data_in['distance_previous']
             mask = dp_in > 0.5
-            dp_out = torch.norm(motion[:, 3:6].detach(), dim=1, keepdim=True)
-            loss_scale_previous = (1.0 - dp_out[mask] * scale[mask] / dp_in[mask]).abs().mean()
-            data_out['loss_scale_previous'] = loss_scale_previous * self.scale_weight
-            loss += data_out['loss_scale_previous']
-            data_out['eval_dp_in'] = dp_in[mask].mean()
-            data_out['eval_dp_out'] = dp_out[mask].mean()
+            if torch.any(mask):
+                dp_out = torch.norm(motion[:, 3:6].detach(), dim=1, keepdim=True)
+                loss_scale_previous = (1.0 - dp_out[mask] * scale[mask] / dp_in[mask]).abs().mean()
+                data_out['loss_scale_previous'] = loss_scale_previous * self.scale_weight
+                loss += data_out['loss_scale_previous']
+                data_out['eval_dp_in'] = dp_in[mask].mean()
+                data_out['eval_dp_out'] = dp_out[mask].mean()
             # distance next
             dn_in = data_in['distance_next']
             mask = dn_in > 0.5
-            dn_out = torch.norm(motion[:, 9:12].detach(), dim=1, keepdim=True)
-            loss_scale_next = (1.0 - dn_out[mask] * scale[mask] / dp_in[mask]).abs().mean()
-            data_out['loss_scale_next'] = loss_scale_next * self.scale_weight
-            loss += data_out['loss_scale_next']
-            data_out['eval_dn_in'] = dn_in[mask].mean()
-            data_out['eval_dn_out'] = dn_out[mask].mean()
+            if torch.any(mask):
+                dn_out = torch.norm(motion[:, 9:12].detach(), dim=1, keepdim=True)
+                loss_scale_next = (1.0 - dn_out[mask] * scale[mask] / dp_in[mask]).abs().mean()
+                data_out['loss_scale_next'] = loss_scale_next * self.scale_weight
+                loss += data_out['loss_scale_next']
+                data_out['eval_dn_in'] = dn_in[mask].mean()
+                data_out['eval_dn_out'] = dn_out[mask].mean()
 
         if self.ground_weight > 0.0:
-            hit = util.hit_plane(ground, camera, image)
-            data_out['ground_hit'] = hit
-            ground_dot = ground[:, 0:3].reshape(-1, 3, 1, 1)
-            ground_dot = (ground_dot * normal).sum(dim=1, keepdim=True)
-            data_out['ground_dot'] = ground_dot
-            ground_dist = torch.exp(-2.8 * torch.pow((hit - depth_out), 2))
-            data_out['ground_dist'] = ground_dist
-            data_out['ground_residual'] = 1.0 - (ground_dot * ground_dist)
-            data_out['loss_ground'] = data_out['ground_residual'].mean()
-            loss += data_out['loss_ground']
+            ground_hit = util.hit_plane(ground, camera, image)
+            data_out['ground_hit'] = ground_hit
+            ground_normal = ground[:, 0:3].reshape(-1, 3, 1, 1)
+            ground_distance = ground[:, 3:4].reshape(-1, 1, 1, 1)
+            up = torch.zeros_like(ground_normal)
+            up[:, 1, ...] = 1.0
+            up_weight = torch.pow(normal.detach() - up, 2.0).sum(dim=1, keepdim=True)
+            up_weight = torch.exp(-2.0 * up_weight)
+            data_out['ground_up_weight'] = up_weight
+            residual_ground_normal = up_weight * (normal.detach() - ground_normal).abs()
+            data_out['residual_ground_normal'] = residual_ground_normal
+            data_out['loss_ground_normal'] = residual_ground_normal.mean() * self.ground_weight
+            loss += data_out['loss_ground_normal']
+
+            residual_ground_distance = (points.detach() * normal.detach()).sum(dim=1, keepdim=True)
+            residual_ground_distance = up_weight * (residual_ground_distance - ground_distance).abs()
+            data_out['residual_ground_distance'] = residual_ground_distance
+            data_out['loss_ground_distance'] = residual_ground_distance.mean() * self.ground_weight
+            loss += data_out['loss_ground_distance']
 
         if self.regular_weight > 0.0:
             loss_regular = 0.0
