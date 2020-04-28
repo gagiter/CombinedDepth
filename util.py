@@ -55,9 +55,9 @@ def sobel(image, padding=0):
 def color_map(image):
     if image.shape[-3] != 1:
         return image
-    red = torch.sin(image * math.pi - math.pi * 0.0)
-    green = torch.sin(image * math.pi * 5.0 - math.pi * 0.0)
-    blue = torch.sin(image * math.pi * 9.0 - math.pi * 0.0)
+    red = torch.sin(image * math.pi - math.pi * 0.5)
+    green = torch.sin(image * math.pi * 2.0 - math.pi * 0.0)
+    blue = torch.sin(image * math.pi * 4.0 - math.pi * 0.0)
 
     red = red * 0.5 + 0.5
     green = green * 0.5 + 0.5

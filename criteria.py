@@ -95,9 +95,9 @@ class Criteria(torch.nn.Module):
             z_in_mean = z_in.sum(dim=(1, 2, 3), keepdim=True) / mask.sum(dim=(1, 2, 3), keepdim=True)
             z_out_mean = z_out.sum(dim=(1, 2, 3), keepdim=True) / mask.sum(dim=(1, 2, 3), keepdim=True)
             global_scale = z_in_mean / z_out_mean
-            depth_in *= global_scale
+            # depth_in *= global_scale
             residual_abs_rel_global = torch.zeros_like(depth_in)
-            residual_abs_rel_global[mask] = (1.0 - depth_in[mask] / depth_out[mask]).abs()
+            residual_abs_rel_global[mask] = (1.0 - (depth_in * global_scale)[mask] / depth_out[mask]).abs()
 
             data_out['residual_abs_rel_global'] = residual_abs_rel_global
             data_out['eval_abs_rel_global'] = residual_abs_rel_global.sum() / mask.sum()
