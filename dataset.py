@@ -71,6 +71,7 @@ class Data(Dataset):
             width = self.target_width
         image = TF.resize(image, (height, width))
         image = TF.to_tensor(image)
+        image = TF.normalize(image, 0.0, 1.0)
         out['image'] = image
 
         if depth is not None:
