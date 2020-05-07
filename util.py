@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import function
 import math
 import numpy as np
+from PIL.ExifTags import TAGS, GPSTAGS
 
 
 def hit_plane(ground, camera, image):
@@ -199,6 +200,36 @@ def project(points, camera, motion):
     uv = uv / points[:, 2:3, ...]
     uv = distort(uv, camera[..., 3:5])
     return uv
+
+
+class Exif:
+    @classmethod
+    def read_gps(cls, meta):
+        items = dict()
+        gps_items = dict()
+        lla = [0.0, 0.0, 0.0]
+        if meta is not None:
+            for key, value in meta.items():
+                if key in TAGS:
+                    items[TAGS[key]] = meta[key]
+
+            if 'GPSInfo' in items:
+                for key in items['GPSInfo'].keys():
+                    name = GPSTAGS[key]
+                    gps_items[name] = items['GPSInfo'][key]
+
+                for index, name in enumerate(['GPSLatitude', 'GPSLongitude', 'GPSAltitude']):
+                    e = gps_items[name]
+                    ref = gps_items[name + 'Ref']
+                    if name in ['GPSLatitude', 'GPSLongitude']:
+                        lla[index] = e[0][0] / e[0][1]
+                        lla[index] += e[1][0] / e[1][1] / 60
+                        lla[index] += e[2][0] / e[2][1] / 3600
+                        lla[0] *= -1 if ref in ['S', 'W'] else 1
+                    else:
+                        lla[index] = e[0] / e[1]
+        return lla
+
 
 
 class GPS:

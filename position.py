@@ -1,29 +1,55 @@
 
 import os
 import argparse
-import csv
 import util
 import matplotlib.pyplot as plt
 import torch
 import numpy as np
+from PIL import Image
+# from PIL.ExifTags import TAGS, GPSTAGS
 
 parser = argparse.ArgumentParser(description='CombinedDepth')
 parser.add_argument('--data_root', type=str, default='data')
 args = parser.parse_args()
 
 
-def lla2enu(gps):
+def save_exifs(root, names, exifs):
+    pass
+
+
+def add_position(exifs, position):
+    return None
+
+
+def read_exifs(root, names):
+    exifs = []
+    for name in names:
+        image_path = os.path.join(root, name)
+        exif = Image.open(image_path)._getexif()
+        exifs.append(exif)
+    return exifs
+
+
+def read_gps(exifs):
+    gps = []
+    for meta in exifs:
+        gps.append(util.Exif.read_gps(meta))
+    return np.array(gps)
+
+
+def localize(gps):
     converter = util.GPS()
     enu = []
-    for g in gps:
-        lla = [float(v) for v in g.split()]
-        enu.append(converter.lla2enu(*lla))
+    for i in range(gps.shape[0]):
+        enu.append(converter.lla2enu(gps[i][0], gps[i][1], gps[i][2]))
     return np.array(enu)
 
 
 def show_position(position):
-    plt.plot(position[:, 0], position[:, 1])
-    plt.show()
+    plt.clf()
+    plt.plot(position[:, 0], position[:, 1], 'bs')
+    plt.plot(position[:, 0], position[:, 1], 'r--')
+    plt.show(block=False)
 
 
 def smooth_position(position):
@@ -44,26 +70,20 @@ def smooth_position(position):
 
 def gps_to_position():
     for root, dirs, files in os.walk(args.data_root):
-        # if files.contains('*.jpg'):
-        if 'train.csv' in files:
-            with open(os.path.join(root, 'train.csv')) as csv_file:
-                csv_reader = csv.reader(csv_file)
-                keys = next(csv_reader)
-                gps_id = keys.index('GPS')
-                position_id = keys.index('Pos')
-                gps = []
-                for row in csv_reader:
-                    gps.append(row[gps_id])
-                position = lla2enu(gps)
-                show_position(position)
-                position = torch.tensor(np.array(position))
-                smooth_position(position)
-                for i in range(100):
+        names = [f for f in files if f.endswith('.jpg')]
+        if len(names) == 0:
+            continue
+        exifs = read_exifs(root, names)
+        gps = read_gps(exifs)
+        position = localize(gps)
+        show_position(position)
+        print(root)
+    # plt.show()
+        # position = torch.tensor(np.array(position))
+        # smooth_position(position)
+        # exifs = add_position(exifs, position)
+        # save_exifs(root, names, exifs)
 
-                    show_position(position)
-                for k, row in csv_reader:
-                    row[position_id] = position[k]
-                csv.save(csv_reader, os.path.join(root, 'train.csv'))
 
 
 if __name__ == '__main__':
