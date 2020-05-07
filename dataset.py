@@ -12,7 +12,6 @@ import util
 import numpy as np
 
 
-
 class Data(Dataset):
     def __init__(self, data_root, target_pixels=350000,
                  target_width=640, target_height=480, use_number=0,

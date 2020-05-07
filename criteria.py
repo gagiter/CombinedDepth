@@ -33,7 +33,7 @@ class Criteria(torch.nn.Module):
             data_out['eval_scale'] = scale.mean()
             # distance previous
             dp_in = data_in['distance_previous']
-            mask = dp_in > 0.5
+            mask = dp_in > 0.25
             if torch.any(mask):
                 dp_out = torch.norm(motion[:, 3:6].detach(), dim=1, keepdim=True)
                 loss_scale_previous = (1.0 - dp_out[mask] * scale[mask] / dp_in[mask]).abs().mean()
@@ -43,10 +43,10 @@ class Criteria(torch.nn.Module):
                 data_out['eval_dp_out'] = dp_out[mask].mean()
             # distance next
             dn_in = data_in['distance_next']
-            mask = dn_in > 0.5
+            mask = dn_in > 0.25
             if torch.any(mask):
                 dn_out = torch.norm(motion[:, 9:12].detach(), dim=1, keepdim=True)
-                loss_scale_next = (1.0 - dn_out[mask] * scale[mask] / dp_in[mask]).abs().mean()
+                loss_scale_next = (1.0 - dn_out[mask] * scale[mask] / dn_in[mask]).abs().mean()
                 data_out['loss_scale_next'] = loss_scale_next * self.scale_weight
                 loss += data_out['loss_scale_next']
                 data_out['eval_dn_in'] = dn_in[mask].mean()
