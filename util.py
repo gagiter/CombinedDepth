@@ -7,6 +7,31 @@ import numpy as np
 from PIL.ExifTags import TAGS, GPSTAGS
 
 
+def plane_grid(ground, camera, shape, device):
+    batch, _, height, width = shape
+    uv = near_grid(camera, [height, width], device)
+    ones = torch.ones([batch, 1, height, width], dtype=uv.dtype, device=uv.device)
+    ray = torch.cat([uv, ones], dim=1)
+    ground_y = ground[:, 0:3].reshape(batch, 3, 1, 1)
+    ground_x = torch.zeros_like(ground_y)
+    ground_x[:, 0, ...] = 1.0
+    ground_z = cross(ground_x, ground_y)
+    ground_z = torch.nn.functional.normalize(ground_z)
+    ground_x = cross(ground_z, ground_y)
+    rn = (ray * ground_y).sum(dim=1, keepdim=True)
+    d = ground[:, 3].reshape(batch, 1, 1, 1)
+    z = d / rn
+    p = z * ray
+    p_x = (p * ground_x).sum(dim=1, keepdim=True)
+    p_z = (p * ground_z).sum(dim=1, keepdim=True)
+    p_xz = torch.cat([p_x, p_z], dim=1)
+    grid = torch.pow(p_xz - torch.round(p_xz), 2.0).min(dim=1, keepdim=True)[0]
+    grid = torch.exp(-100.0 * grid)
+    grid[p_z < 0.0] = 0.0
+    grid[p_z > 80.0] = 0.0
+    return grid
+
+
 def hit_plane(ground, camera, image):
     batch, _, height, width = image.shape
     uv = near_grid(camera, [height, width], image.device)

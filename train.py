@@ -78,7 +78,8 @@ def train():
     if args.resume > 0 and os.path.exists(load_dir):
         model.load_state_dict(torch.load(os.path.join(load_dir, 'model.pth')))
         optimiser.load_state_dict(torch.load(os.path.join(load_dir, 'optimiser.pth')))
-        args.step_start = torch.load(os.path.join(load_dir, 'step.pth'))['step']
+        if os.path.exists(os.path.join(load_dir, 'step.pth')):
+            args.step_start = torch.load(os.path.join(load_dir, 'step.pth'))['step']
 
     writer = SummaryWriter(os.path.join('runs', date_time + args.model_name))
     writer.add_text('args', str(args), 0)

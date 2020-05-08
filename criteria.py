@@ -53,25 +53,20 @@ class Criteria(torch.nn.Module):
                 data_out['eval_dn_out'] = dn_out[mask].mean()
 
         if self.ground_weight > 0.0:
-            ground_hit = util.hit_plane(ground, camera, image)
-            data_out['ground_hit'] = ground_hit
+            ground_grid = util.plane_grid(ground.detach(), camera.detach(), image.shape, image.device)
+            data_out['ground_grid'] = ground_grid
             ground_normal = ground[:, 0:3].reshape(-1, 3, 1, 1)
-            ground_distance = ground[:, 3:4].reshape(-1, 1, 1, 1)
-            up = torch.zeros_like(ground_normal)
-            up[:, 1, ...] = 1.0
-            up_weight = torch.pow(normal.detach() - up, 2.0).sum(dim=1, keepdim=True)
-            up_weight = torch.exp(-2.0 * up_weight)
-            data_out['ground_up_weight'] = up_weight
-            residual_ground_normal = up_weight * (normal.detach() - ground_normal).abs()
-            data_out['residual_ground_normal'] = residual_ground_normal
-            data_out['loss_ground_normal'] = residual_ground_normal.mean() * self.ground_weight
+            normal_weight = normal.detach() - ground_normal.detach()
+            normal_weight = torch.pow(normal_weight, 2.0).sum(dim=1, keepdim=True)
+            normal_weight = torch.exp(-normal_weight * 5.0)
+            data_out['ground_normal_weight'] = normal_weight
+
+            ground_normal_residual = normal_weight * (ground_normal - normal.detach()).abs()
+            data_out['ground_normal_residual'] = ground_normal_residual.mean(dim=1, keepdim=True)
+            data_out['loss_ground_normal'] = data_out['ground_normal_residual'].mean()
             loss += data_out['loss_ground_normal']
 
-            residual_ground_distance = (points.detach() * normal.detach()).sum(dim=1, keepdim=True)
-            residual_ground_distance = up_weight * (residual_ground_distance - ground_distance).abs()
-            data_out['residual_ground_distance'] = residual_ground_distance
-            data_out['loss_ground_distance'] = residual_ground_distance.mean() * self.ground_weight
-            loss += data_out['loss_ground_distance']
+
 
         if self.regular_weight > 0.0:
             loss_regular = 0.0

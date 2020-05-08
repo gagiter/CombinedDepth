@@ -9,7 +9,7 @@ parser.add_argument('--save_depth_name', type=str, default='model_depth.pt')
 parser.add_argument('--save_camera_name', type=str, default='model_camera.pt')
 args = parser.parse_args()
 
-checkpoint_name = os.path.join('checkpoint', args.model_name,  + 'model.pth')
+checkpoint_name = os.path.join('checkpoint', args.model_name,  'model.pth')
 model = Model()
 model.load_state_dict(torch.load(checkpoint_name))
 example = torch.rand(1, 3, 512, 512)
