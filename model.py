@@ -52,7 +52,7 @@ class Model(torch.nn.Module):
         ground_n = camera[:, 5:8]
         ground_n[:, 1:2] = ground_n[:, 1:2] + 0.5
         ground_n = torch.nn.functional.normalize(ground_n)
-        ground_d = (camera[:, 8:9] + 0.5) * 4.0
+        ground_d = camera[:, 8:9] + 0.5
         data_out['ground'] = torch.cat([ground_n, ground_d], dim=1)
         data_out['scale'] = (camera[:, 9:10] + 0.5) * 10.0
 

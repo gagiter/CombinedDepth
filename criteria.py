@@ -56,17 +56,31 @@ class Criteria(torch.nn.Module):
             ground_grid = util.plane_grid(ground.detach(), camera.detach(), image.shape, image.device)
             data_out['ground_grid'] = ground_grid
             ground_normal = ground[:, 0:3].reshape(-1, 3, 1, 1)
+            ground_d = -ground[:, 3:4].reshape(-1, 1, 1, 1)
             normal_weight = normal.detach() - ground_normal.detach()
             normal_weight = torch.pow(normal_weight, 2.0).sum(dim=1, keepdim=True)
             normal_weight = torch.exp(-normal_weight * 5.0)
             data_out['ground_normal_weight'] = normal_weight
 
-            ground_normal_residual = normal_weight * (ground_normal - normal.detach()).abs()
+            ground_for_dist = torch.cat([ground_normal.detach(), ground_d], dim=1)
+            ground_dist = util.plane_dist(ground_for_dist, camera.detach(), depth_out.detach()).abs()
+            data_out['ground_dist'] = ground_dist
+            dist_weight = torch.pow(ground_dist.detach(), 2.0)
+            dist_weight = torch.exp(-25.0 * dist_weight)
+            data_out['ground_dist_weight'] = dist_weight
+
+            ground_weight = normal_weight * dist_weight
+            data_out['ground_weight'] = ground_weight
+
+            ground_normal_residual = ground_weight * (ground_normal - normal.detach()).abs()
             data_out['ground_normal_residual'] = ground_normal_residual.mean(dim=1, keepdim=True)
             data_out['loss_ground_normal'] = data_out['ground_normal_residual'].mean()
             loss += data_out['loss_ground_normal']
 
-
+            ground_dist_residual = ground_weight * ground_dist.abs()
+            data_out['ground_dist_residual'] = ground_dist_residual
+            data_out['loss_ground_dist'] = data_out['ground_dist_residual'].mean()
+            loss += data_out['loss_ground_dist']
 
         if self.regular_weight > 0.0:
             loss_regular = 0.0

@@ -7,6 +7,12 @@ import numpy as np
 from PIL.ExifTags import TAGS, GPSTAGS
 
 
+def plane_dist(plane, camera, depth):
+    points = unproject(depth, camera)
+    dist = (points * plane).sum(dim=1, keepdim=True)
+    return dist
+
+
 def plane_grid(ground, camera, shape, device):
     batch, _, height, width = shape
     uv = near_grid(camera, [height, width], device)
