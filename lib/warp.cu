@@ -24,37 +24,24 @@ __global__ void warp_forward_cuda_kernel(float* image, float* sample, float* out
 	int row = blockIdx.y * blockDim.y + threadIdx.y;
 	int col = blockIdx.z * blockDim.z + threadIdx.z;
 
-	if (row >= height || col >= width) { return; }
+	if (row == 0 || row >= (height - 1) || col == 0 || col >= (width - 1)) { return; }
 
 	size_t idx_u = batch_id * (2 * height * width) + 0 * (height * width) + row * width + col;
 	size_t idx_v = batch_id * (2 * height * width) + 1 * (height * width) + row * width + col;
 
-	float u = (width - 1) * 0.5 * (sample[idx_u] + 1.0);
-	float v = (height - 1) * 0.5 * (sample[idx_v] + 1.0);
+	float u = (width - 1) * (0.5 * sample[idx_u] + 0.5);
+	float v = (height - 1) * (0.5 * sample[idx_v] + 0.5);
 
 	int iu = (int)floor(u);
 	int iv = (int)floor(v);
 
-	if (iu >= 0 && iv >= 0 && iu < (width - 1) && iv < (height - 1)) {
-		float uu = u - iu;
-		float vv = v - iv;
-		float w11 = (1.0 - uu) * (1.0 - vv);
-		float w12 = uu * (1.0 - vv);
-		float w21 = (1.0 - uu) * vv;
-		float w22 = uu * vv;
-
+	if (iu >= 0 && iv >= 0 && iu < width && iv < height) {
 		for (int c = 0; c < channels; c++) {
-			size_t idx_11 = batch_id * (channels * height * width) + c * (height * width) + (iv + 0) * width + (iu + 0);
-			size_t idx_12 = batch_id * (channels * height * width) + c * (height * width) + (iv + 0) * width + (iu + 1);
-			size_t idx_21 = batch_id * (channels * height * width) + c * (height * width) + (iv + 1) * width + (iu + 0);
-			size_t idx_22 = batch_id * (channels * height * width) + c * (height * width) + (iv + 1) * width + (iu + 1);
-			size_t idx_out = batch_id * (channels * height * width) + c * (height * width) + row * width + col;
-
-			out[idx_out] = w11 * image[idx_11] + w12 * image[idx_12] + w21 * image[idx_21] + w22 * image[idx_22];
+			size_t idx_image = batch_id * (channels * height * width) + c * (height * width) + row * width + col;
+			size_t idx_out = batch_id * (channels * height * width) + c * (height * width) + iv * width + iu;
+			out[idx_out] = image[idx_image];
 		}
 	}
-
-
 }
 
 __global__ void warp_backward_cuda_kernel(float* image, float* sample, float* grad, float* out, int channels, int height, int width) {
@@ -63,41 +50,29 @@ __global__ void warp_backward_cuda_kernel(float* image, float* sample, float* gr
 	int row = blockIdx.y * blockDim.y + threadIdx.y;
 	int col = blockIdx.z * blockDim.z + threadIdx.z;
 
-	if (row >= height || col >= width) { return; }
+	if (row == 0 || row >= (height - 1) || col == 0 || col >= (width - 1)) { return; }
 
 	size_t idx_u = batch_id * (2 * height * width) + 0 * (height * width) + row * width + col;
 	size_t idx_v = batch_id * (2 * height * width) + 1 * (height * width) + row * width + col;
 
-	float u = (width - 1) * 0.5 * (sample[idx_u] + 1.0);
-	float v = (height - 1) * 0.5 * (sample[idx_v] + 1.0);
-
+	float u = (width - 1) * (0.5 * sample[idx_u] + 0.5);
+	float v = (height - 1) * (0.5 * sample[idx_v] + 0.5);
 	int iu = (int)floor(u);
 	int iv = (int)floor(v);
 
-	if (iu >= 0 && iv >= 0 && iu < (width - 1) && iv < (height - 1)) {
-		float uu = u - iu;
-		float vv = v - iv;
-
-		float dw11du = -(1.0 - vv) * (width - 1) * 0.5;
-		float dw12du = (1.0 - vv) * (width - 1) * 0.5;
-		float dw21du = -vv * (width - 1) * 0.5;
-		float dw22du = vv * (width - 1) * 0.5;
-
-		float dw11dv = -(1.0 - uu) * (height - 1) * 0.5;
-		float dw12dv = -uu * (height - 1) * 0.5;
-		float dw21dv = (1.0 - uu) * (height - 1) * 0.5;
-		float dw22dv = uu * (height - 1) * 0.5;
+	if (iu >= 0 && iv >= 0 && iu < width && iv < height) {
 
 		float gu = 0.0;
 		float gv = 0.0;
 		for (int c = 0; c < channels; c++) {
-			size_t idx_11 = batch_id * (channels * height * width) + c * (height * width) + (iv + 0) * width + (iu + 0);
-			size_t idx_12 = batch_id * (channels * height * width) + c * (height * width) + (iv + 0) * width + (iu + 1);
-			size_t idx_21 = batch_id * (channels * height * width) + c * (height * width) + (iv + 1) * width + (iu + 0);
-			size_t idx_22 = batch_id * (channels * height * width) + c * (height * width) + (iv + 1) * width + (iu + 1);
-			size_t idx_gd = batch_id * (channels * height * width) + c * (height * width) + row * width + col;
-			gu += grad[idx_gd] * (dw11du * image[idx_11] + dw12du * image[idx_12] + dw21du * image[idx_21] + dw22du * image[idx_22]);
-			gv += grad[idx_gd] * (dw11dv * image[idx_11] + dw12dv * image[idx_12] + dw21dv * image[idx_21] + dw22dv * image[idx_22]);
+			size_t idx_center = batch_id * (channels * height * width) + c * (height * width) + row * width + col;
+			size_t idx_left = idx_center - 1;
+			size_t idx_right = idx_center + 1;
+			size_t idx_top = idx_center - width;
+			size_t idx_bottom = idx_center + width;
+			size_t idx_gd = batch_id * (channels * height * width) + c * (height * width) + iv * width + iu;
+			gu += grad[idx_gd] * (image[idx_left] - image[idx_right]) * (width - 1);
+			gv += grad[idx_gd] * (image[idx_top] - image[idx_bottom]) * (height - 1);
 		}
 
 		out[idx_u] = gu;
@@ -113,19 +88,18 @@ __global__ void warp_forward_with_occlusion_cuda_kernel(
 	int row = blockIdx.y * blockDim.y + threadIdx.y;
 	int col = blockIdx.z * blockDim.z + threadIdx.z;
 
-	if (row >= height || col >= width) { return; }
+	if (row == 0 || row >= (height - 1) || col == 0 || col >= (width - 1)) { return; }
 
 	size_t idx_u = batch_id * (2 * height * width) + 0 * (height * width) + row * width + col;
 	size_t idx_v = batch_id * (2 * height * width) + 1 * (height * width) + row * width + col;
 
-	float u = (width - 1) * 0.5 * (sample[idx_u] + 1.0);
-	float v = (height - 1) * 0.5 * (sample[idx_v] + 1.0);
-
+	float u = (width - 1) * (0.5 * sample[idx_u] + 0.5);
+	float v = (height - 1) * (0.5 * sample[idx_v] + 0.5);
 	int iu = (int)floor(u);
 	int iv = (int)floor(v);
 
 
-	if (iu >= 0 && iv >= 0 && iu < (width - 1) && iv < (height - 1)) {
+	if (iu >= 0 && iv >= 0 && iu < width && iv < height) {
 
 		size_t idx_occ = batch_id * (1 * height * width) + 0 * (height * width) + row * width + col;
 		size_t idx_rec = batch_id * (1 * height * width) + 0 * (height * width) + iv * width + iu;
@@ -133,31 +107,19 @@ __global__ void warp_forward_with_occlusion_cuda_kernel(
 		bool visible = occlusion[idx_occ] > record[idx_rec];
 		if (!visible) { return; }
 
-		float uu = u - iu;
-		float vv = v - iv;
-		float w11 = (1.0 - uu) * (1.0 - vv);
-		float w12 = uu * (1.0 - vv);
-		float w21 = (1.0 - uu) * vv;
-		float w22 = uu * vv;
-
-		
 		while (visible) {
-			if (atomicExch(&(lock[idx_occ]), 1u) == 0u) {
+			if (atomicExch(&(lock[idx_rec]), 1u) == 0u) {
 				visible = occlusion[idx_occ] > record[idx_rec];
 				if (visible) {
 					for (int c = 0; c < channels; c++) {
-						size_t idx_11 = batch_id * (channels * height * width) + c * (height * width) + (iv + 0) * width + (iu + 0);
-						size_t idx_12 = batch_id * (channels * height * width) + c * (height * width) + (iv + 0) * width + (iu + 1);
-						size_t idx_21 = batch_id * (channels * height * width) + c * (height * width) + (iv + 1) * width + (iu + 0);
-						size_t idx_22 = batch_id * (channels * height * width) + c * (height * width) + (iv + 1) * width + (iu + 1);
-						size_t idx_out = batch_id * (channels * height * width) + c * (height * width) + row * width + col;
-
-						out[idx_out] = w11 * image[idx_11] + w12 * image[idx_12] + w21 * image[idx_21] + w22 * image[idx_22];
+						size_t idx_image = batch_id * (channels * height * width) + c * (height * width) + row * width + col;
+						size_t idx_out = batch_id * (channels * height * width) + c * (height * width) + iv * width + iu;
+						out[idx_out] = image[idx_image];
 					}
 				}
 				record[idx_rec] = occlusion[idx_occ];
 				visible = false;
-				atomicExch(&(lock[idx_occ]), 0u);
+				atomicExch(&(lock[idx_rec]), 0u);
 			}
 		}
 	}
@@ -171,18 +133,17 @@ __global__ void warp_backward_with_occlusion_cuda_kernel(
 	int row = blockIdx.y * blockDim.y + threadIdx.y;
 	int col = blockIdx.z * blockDim.z + threadIdx.z;
 
-	if (row >= height || col >= width) { return; }
+	if (row == 0 || row >= (height - 1) || col == 0 || col >= (width - 1)) { return; }
 
 	size_t idx_u = batch_id * (2 * height * width) + 0 * (height * width) + row * width + col;
 	size_t idx_v = batch_id * (2 * height * width) + 1 * (height * width) + row * width + col;
 
-	float u = (width - 1) * 0.5 * (sample[idx_u] + 1.0);
-	float v = (height - 1) * 0.5 * (sample[idx_v] + 1.0);
-
+	float u = (width - 1) * (0.5 * sample[idx_u] + 0.5);
+	float v = (height - 1) * (0.5 * sample[idx_v] + 0.5);
 	int iu = (int)floor(u);
 	int iv = (int)floor(v);
 
-	if (iu >= 0 && iv >= 0 && iu < (width - 1) && iv < (height - 1)) {
+	if (iu >= 0 && iv >= 0 && iu < width && iv < height) {
 
 		size_t idx_occ = batch_id * (1 * height * width) + 0 * (height * width) + row * width + col;
 		size_t idx_rec = batch_id * (1 * height * width) + 0 * (height * width) + iv * width + iu;
@@ -190,40 +151,28 @@ __global__ void warp_backward_with_occlusion_cuda_kernel(
 		bool visible = occlusion[idx_occ] > record[idx_rec];
 		if (!visible) { return; }
 
-		float uu = u - iu;
-		float vv = v - iv;
-
-		float dw11du = -(1.0 - vv) * (width - 1) * 0.5;
-		float dw12du = (1.0 - vv) * (width - 1) * 0.5;
-		float dw21du = -vv * (width - 1) * 0.5;
-		float dw22du = vv * (width - 1) * 0.5;
-
-		float dw11dv = -(1.0 - uu) * (height - 1) * 0.5;
-		float dw12dv = -uu * (height - 1) * 0.5;
-		float dw21dv = (1.0 - uu) * (height - 1) * 0.5;
-		float dw22dv = uu * (height - 1) * 0.5;
-
 		while (visible) {
-			if (atomicExch(&(lock[idx_occ]), 1u) == 0u) {
+			if (atomicExch(&(lock[idx_rec]), 1u) == 0u) {
 				visible = occlusion[idx_occ] > record[idx_rec];
 				if (visible) {
 					float gu = 0.0;
 					float gv = 0.0;
 					for (int c = 0; c < channels; c++) {
-						size_t idx_11 = batch_id * (channels * height * width) + c * (height * width) + (iv + 0) * width + (iu + 0);
-						size_t idx_12 = batch_id * (channels * height * width) + c * (height * width) + (iv + 0) * width + (iu + 1);
-						size_t idx_21 = batch_id * (channels * height * width) + c * (height * width) + (iv + 1) * width + (iu + 0);
-						size_t idx_22 = batch_id * (channels * height * width) + c * (height * width) + (iv + 1) * width + (iu + 1);
-						size_t idx_gd = batch_id * (channels * height * width) + c * (height * width) + row * width + col;
-						gu += grad[idx_gd] * (dw11du * image[idx_11] + dw12du * image[idx_12] + dw21du * image[idx_21] + dw22du * image[idx_22]);
-						gv += grad[idx_gd] * (dw11dv * image[idx_11] + dw12dv * image[idx_12] + dw21dv * image[idx_21] + dw22dv * image[idx_22]);
+						size_t idx_center = batch_id * (channels * height * width) + c * (height * width) + row * width + col;
+						size_t idx_left = idx_center - 1;
+						size_t idx_right = idx_center + 1;
+						size_t idx_top = idx_center - width;
+						size_t idx_bottom = idx_center + width;
+						size_t idx_gd = batch_id * (channels * height * width) + c * (height * width) + iv * width + iu;
+						gu += grad[idx_gd] * (image[idx_left] - image[idx_right]) * (width - 1);
+						gv += grad[idx_gd] * (image[idx_top] - image[idx_bottom]) * (height - 1);
 					}
 					out[idx_u] = gu;
 					out[idx_v] = gv;
 				}
 				record[idx_rec] = occlusion[idx_occ];
 				visible = false;
-				atomicExch(&(lock[idx_occ]), 0u);
+				atomicExch(&(lock[idx_rec]), 0u);
 			}
 		}
 	}
