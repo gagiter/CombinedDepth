@@ -158,12 +158,12 @@ class Criteria(torch.nn.Module):
                     image_next_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
                 depth_down = torch.nn.functional.interpolate(
                     depth_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
-                warp_previous = util.warp(image_previous_down, depth_down, camera, motion_previous, self.occlusion)
-                warp_next = util.warp(image_next_down, depth_down, camera, motion_next, self.occlusion)
+                warp_previous = util.warp(image_down, depth_down, camera, motion_previous, self.occlusion)
+                warp_next = util.warp(image_down, depth_down, camera, motion_next, self.occlusion)
                 mask_previous = warp_previous > 0.0
                 mask_next = warp_next > 0.0
-                residual_previous = (image_down * mask_previous - warp_previous).abs()
-                residual_next = (image_down * mask_next - warp_next).abs()
+                residual_previous = (image_previous_down * mask_previous - warp_previous).abs()
+                residual_next = (image_next_down * mask_next - warp_next).abs()
                 data_out['residual_previous_%d' % i] = residual_previous
                 data_out['residual_next_%d' % i] = residual_next
                 data_out['warp_previous_%d' % i] = warp_previous
