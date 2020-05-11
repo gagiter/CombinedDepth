@@ -10,10 +10,10 @@ class WarpFuncion(torch.autograd.Function):
         warped, weight, mask = libwarp.forward(
             image.contiguous(), sample.contiguous(), depth.contiguous())
         ctx.save_for_backward(image, sample, depth, weight)
-        return warped
+        return warped  # , weight, mask
 
     @staticmethod
-    def backward(ctx, grad_warp):
+    def backward(ctx, grad_warp):  # , grad_weight, grad_mask
         image, sample, depth, weight = ctx.saved_tensors
         grad_image = grad_sample = grad_occlusion = None
         if ctx.needs_input_grad[1]:
@@ -78,7 +78,7 @@ def test2():
 
     for i in range(200):
         sample = grid + move
-        warp, weight, mask = WarpFuncion.apply(image, sample, depth)
+        warp, weight, mask = WarpFuncion.apply(image, sample, depth) #
         residual_warp = (warp - mask * ref).abs()
         loss = residual_warp.mean()
         optimizer.zero_grad()

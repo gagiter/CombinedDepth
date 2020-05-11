@@ -43,12 +43,12 @@ __global__ void warp_backward_cuda_kernel(
 
 	float gu = 0.0;
 	float gv = 0.0;
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < 1; i++) {
 		size_t base = batch_id * height * width;
 		float weight0 = weight[base + offset[i]];
 		float weight1 = ww[i] * wd;
 
-		if (weight0 > FLT_EPSILON) {
+		if (weight0 > 0.000001) {
 			float w = weight1 / weight0;
 			for (int c = 0; c < channels; c++) {
 				size_t channel_base = batch_id * channels * height * width + c * height * width;
@@ -178,13 +178,13 @@ __global__ void warp_forward_cuda_kernel(
 	float ww[4] = { (1.0f - uu) * (1.0f - vv), uu * (1.0f - vv), (1.0f - uu) * vv, uu * vv };
 	size_t base = batch_id * height * width;
 
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < 1; i++) {
 		bool flag = true;
 		while (flag) {
 			if (atomicExch(&(lock[base + offset[i]]), 1u) == 0u) {
 				float weight0 = weight[base + offset[i]];
 				float weight1 = weight0 + ww[i] * wd;
-				if (weight1 > FLT_EPSILON) {
+				if (weight1 > 0.000001) {
 					for (int c = 0; c < channels; c++) {
 						size_t channel_base = batch_id * channels * height * width + c * height * width;
 						float color = image[channel_base + row * width + col];
