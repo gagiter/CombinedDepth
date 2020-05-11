@@ -86,27 +86,32 @@ class Criteria(torch.nn.Module):
             loss_regular = 0.0
             depth_down = depth_out
             image_down = image
-            for i in range(self.down_times):
+            for i in range(min(self.down_times, 1)):
                 scale_factor = 1.0 if i == 0 else 0.5
                 image_down = torch.nn.functional.interpolate(
                         image_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
                 depth_down = torch.nn.functional.interpolate(
                             depth_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
-                normal_down, _ = util.normal(depth_down, camera)
-                normal_grad = torch.cat(util.sobel(normal_down), dim=1)\
-                    .abs().mean(dim=1, keepdim=True)
-                image_grad = torch.cat(util.sobel(image_down), dim=1)\
-                    .abs().mean(dim=1, keepdim=True)
-                image_grad_inv = torch.exp(-8.0 * image_grad * image_grad)
-                regular = normal_grad * image_grad_inv
-                data_out['grad_depth_down_%d' % i] = depth_down
-                data_out['grad_normal_down_%d' % i] = normal_down * 0.5 + 0.5
-                data_out['grad_normal_%d' % i] = normal_grad
-                data_out['grad_image_inv_%d' % i] = image_grad_inv
-                data_out['grad_regular_%d' % i] = regular
-                loss_regular += regular.mean()
 
-            data_out['loss_regular'] = loss_regular / self.down_times * self.regular_weight
+                image_grad = torch.cat(util.grad(image_down), dim=1).abs().mean(dim=1, keepdim=True)
+                image_grad = torch.cat(util.grad(image_grad), dim=1).abs().mean(dim=1, keepdim=True)
+
+                depth_grad = torch.cat(util.grad(depth_down), dim=1).abs().mean(dim=1, keepdim=True)
+                depth_grad = torch.cat(util.grad(depth_grad), dim=1).abs().mean(dim=1, keepdim=True)
+
+                regular_weight = torch.exp(-400.0 * image_grad * image_grad)
+                regular_residual = regular_weight * depth_grad
+                # regular_residual = depth_grad
+
+                data_out['regular_image_down_%d' % i] = image_down
+                data_out['regular_depth_down_%d' % i] = depth_down
+                data_out['regular_image_grad_%d' % i] = image_grad
+                data_out['regular_depth_grad_%d' % i] = depth_grad
+                data_out['regular_weight_%d' % i] = regular_weight
+                data_out['regular_residual_%d' % i] = regular_residual
+                loss_regular += regular_residual.mean()
+
+            data_out['loss_regular'] = loss_regular / min(self.down_times, 1) * self.regular_weight
             loss += data_out['loss_regular']
 
         if 'depth' in data_in:
@@ -158,10 +163,12 @@ class Criteria(torch.nn.Module):
                     image_next_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
                 depth_down = torch.nn.functional.interpolate(
                     depth_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
-                warp_previous = util.warp(image_down, depth_down, camera, motion_previous, self.occlusion)
-                warp_next = util.warp(image_down, depth_down, camera, motion_next, self.occlusion)
-                mask_previous = warp_previous > 0.0
-                mask_next = warp_next > 0.0
+                warp_previous, record_previous = util.warp(
+                    image_down, depth_down, camera, motion_previous, self.occlusion)
+                warp_next, record_next = util.warp(
+                    image_down, depth_down, camera, motion_next, self.occlusion)
+                mask_previous = record_previous != 0.0
+                mask_next = record_next != 0.0
                 residual_previous = (image_previous_down * mask_previous - warp_previous).abs()
                 residual_next = (image_next_down * mask_next - warp_next).abs()
                 data_out['residual_previous_%d' % i] = residual_previous

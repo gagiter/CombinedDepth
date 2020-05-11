@@ -9,7 +9,7 @@
 #include <vector>
 
 std::vector<torch::Tensor> warp_forward(torch::Tensor image, torch::Tensor sample, torch::Tensor depth);
-torch::Tensor warp_backward(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor weight, torch::Tensor grad);
+torch::Tensor warp_backward(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor grad);
 
 #ifndef _DEBUG
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {

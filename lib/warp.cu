@@ -16,8 +16,9 @@ void check_cuda(cudaError_t result, char const* const func, const char* file, in
 
 #endif
 
+
 __global__ void warp_backward_cuda_kernel(
-	float* image, float* sample, float* depth, float* weight, float* grad, float* out, 
+	float* image, float* sample, float* depth, float* record, float* grad, float* out, 
 	int channels, int height, int width) {
 
 	int batch_id = blockIdx.x;
@@ -35,40 +36,30 @@ __global__ void warp_backward_cuda_kernel(
 	int iv = (int)floor(v);
 	if (iu <= 0 || iu >= (width - 1) || iv <= 0 || iv >= (height - 1)) { return; }
 
-	float wd = depth[batch_id * height * width + row * width + col];
-	float uu = u - iu;
-	float vv = v - iv;
-	int offset[4] = { iv * width + iu, iv * width + iu + 1, (iv + 1) * width + iu, (iv + 1) * width + iu + 1 };
-	float ww[4] = { (1.0f - uu) * (1.0f - vv), uu * (1.0f - vv), (1.0f - uu) * vv, uu * vv };
+	size_t idx_depth = batch_id * (1 * height * width) + 0 * (height * width) + row * width + col;
+	size_t idx_record = batch_id * (1 * height * width) + 0 * (height * width) + iv * width + iu;
+
+	bool visible = depth[idx_depth] >= record[idx_record];
+	if (!visible) { return; }
 
 	float gu = 0.0;
 	float gv = 0.0;
-	for (int i = 0; i < 1; i++) {
-		size_t base = batch_id * height * width;
-		float weight0 = weight[base + offset[i]];
-		float weight1 = ww[i] * wd;
-
-		if (weight0 > 0.000001) {
-			float w = weight1 / weight0;
-			for (int c = 0; c < channels; c++) {
-				size_t channel_base = batch_id * channels * height * width + c * height * width;
-				size_t idx_center = channel_base + row * width + col;
-				size_t idx_left = idx_center - 1;
-				size_t idx_right = idx_center + 1;
-				size_t idx_top = idx_center - width;
-				size_t idx_bottom = idx_center + width;
-
-				gu += grad[channel_base + offset[i]] * (image[idx_left] - image[idx_right]) * (width - 1) * w;
-				gv += grad[channel_base + offset[i]] * (image[idx_top] - image[idx_bottom]) * (height - 1) * w;
-			}
-		}
+	for (int c = 0; c < channels; c++) {
+		size_t idx_center = batch_id * (channels * height * width) + c * (height * width) + row * width + col;
+		size_t idx_left = idx_center - 1;
+		size_t idx_right = idx_center + 1;
+		size_t idx_top = idx_center - width;
+		size_t idx_bottom = idx_center + width;
+		size_t idx_gd = batch_id * (channels * height * width) + c * (height * width) + iv * width + iu;
+		gu += grad[idx_gd] * (image[idx_left] - image[idx_right]) * (width - 1);
+		gv += grad[idx_gd] * (image[idx_top] - image[idx_bottom]) * (height - 1);
 	}
 	out[idx_u] = gu;
 	out[idx_v] = gv;
 }
 
 
-torch::Tensor warp_backward_cuda(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor weight, torch::Tensor grad) {
+torch::Tensor warp_backward_cuda(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor grad) {
 
 	int batch_size = image.size(0);
 	int channels = image.size(1);
@@ -79,7 +70,7 @@ torch::Tensor warp_backward_cuda(torch::Tensor image, torch::Tensor sample, torc
 	float* image_data = image.data<float>();
 	float* sample_data = sample.data<float>();
 	float* depth_data = depth.data<float>();
-	float* weight_data = weight.data<float>();
+	float* record_data = record.data<float>();
 	float* grad_data = grad.data<float>();
 	float* out_data = out.data<float>();
 
@@ -87,7 +78,7 @@ torch::Tensor warp_backward_cuda(torch::Tensor image, torch::Tensor sample, torc
 	dim3 blocks(batch_size, height / 16 + 1, width / 16 + 1);
 
 	warp_backward_cuda_kernel << <blocks, threads >> > (
-		image_data, sample_data, depth_data, weight_data, grad_data, out_data, channels, height, width);
+		image_data, sample_data, depth_data, record_data, grad_data, out_data, channels, height, width);
 
 #ifdef _DEBUG
 	checkCudaErrors(cudaGetLastError());
@@ -100,27 +91,27 @@ torch::Tensor warp_backward_cuda(torch::Tensor image, torch::Tensor sample, torc
 }
 
 
-torch::Tensor warp_backward(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor weight, torch::Tensor grad) {
+torch::Tensor warp_backward(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor grad) {
 
 	TORCH_CHECK(image.is_contiguous());
 	TORCH_CHECK(sample.is_contiguous());
 	TORCH_CHECK(depth.is_contiguous());
-	TORCH_CHECK(weight.is_contiguous());
+	TORCH_CHECK(record.is_contiguous());
 	TORCH_CHECK(grad.is_contiguous());
 	TORCH_CHECK(image.type().is_cuda());
 	TORCH_CHECK(sample.type().is_cuda());
 	TORCH_CHECK(depth.type().is_cuda());
-	TORCH_CHECK(weight.type().is_cuda());
+	TORCH_CHECK(record.type().is_cuda());
 	TORCH_CHECK(grad.type().is_cuda());
 	TORCH_CHECK(image.dtype() == torch::kFloat32);
 	TORCH_CHECK(sample.dtype() == torch::kFloat32);
 	TORCH_CHECK(depth.dtype() == torch::kFloat32);
-	TORCH_CHECK(weight.dtype() == torch::kFloat32);
+	TORCH_CHECK(record.dtype() == torch::kFloat32);
 	TORCH_CHECK(grad.dtype() == torch::kFloat32);
 	TORCH_CHECK(image.dim() == 4);
 	TORCH_CHECK(sample.dim() == 4);
 	TORCH_CHECK(depth.dim() == 4);
-	TORCH_CHECK(weight.dim() == 4);
+	TORCH_CHECK(record.dim() == 4);
 	TORCH_CHECK(grad.dim() == 4);
 	int batch_num = image.size(0);
 	int channels = image.size(1);
@@ -136,23 +127,23 @@ torch::Tensor warp_backward(torch::Tensor image, torch::Tensor sample, torch::Te
 	TORCH_CHECK(depth.size(2) == height);
 	TORCH_CHECK(depth.size(3) == width);
 	TORCH_CHECK(depth.device() == image.device());
-	TORCH_CHECK(weight.size(0) == batch_num);
-	TORCH_CHECK(weight.size(1) == 1);
-	TORCH_CHECK(weight.size(2) == height);
-	TORCH_CHECK(weight.size(3) == width);
-	TORCH_CHECK(weight.device() == image.device());
+	TORCH_CHECK(record.size(0) == batch_num);
+	TORCH_CHECK(record.size(1) == 1);
+	TORCH_CHECK(record.size(2) == height);
+	TORCH_CHECK(record.size(3) == width);
+	TORCH_CHECK(record.device() == image.device());
 	TORCH_CHECK(grad.size(0) == batch_num);
 	TORCH_CHECK(grad.size(1) == channels);
 	TORCH_CHECK(grad.size(2) == height);
 	TORCH_CHECK(grad.size(3) == width);
 	TORCH_CHECK(grad.device() == image.device());
 
-	return warp_backward_cuda(image, sample, depth, weight, grad);
+	return warp_backward_cuda(image, sample, depth, record, grad);
 }
 
 
 __global__ void warp_forward_cuda_kernel(
-	float* image, float* sample, float* depth, float* weight, unsigned char* mask, float* out, int* lock,
+	float* image, float* sample, float* depth, float* record, float* out, int* lock,
 	int channels, int height, int width) {
 
 	int batch_id = blockIdx.x;
@@ -171,32 +162,25 @@ __global__ void warp_forward_cuda_kernel(
 
 	if (iu < 0 || iu >= (width - 1) || iv < 0 || iv >= (height - 1)) { return; }
 
-	float wd = depth[batch_id * height * width + row * width + col];
-	float uu = u - iu;
-	float vv = v - iv;
-	size_t offset[4] = { iv * width + iu, iv * width + iu + 1, (iv + 1) * width + iu, (iv + 1) * width + iu + 1 };
-	float ww[4] = { (1.0f - uu) * (1.0f - vv), uu * (1.0f - vv), (1.0f - uu) * vv, uu * vv };
-	size_t base = batch_id * height * width;
+	size_t idx_depth = batch_id * (1 * height * width) + 0 * (height * width) + row * width + col;
+	size_t idx_record = batch_id * (1 * height * width) + 0 * (height * width) + iv * width + iu;
 
-	for (int i = 0; i < 1; i++) {
-		bool flag = true;
-		while (flag) {
-			if (atomicExch(&(lock[base + offset[i]]), 1u) == 0u) {
-				float weight0 = weight[base + offset[i]];
-				float weight1 = weight0 + ww[i] * wd;
-				if (weight1 > 0.000001) {
-					for (int c = 0; c < channels; c++) {
-						size_t channel_base = batch_id * channels * height * width + c * height * width;
-						float color = image[channel_base + row * width + col];
-						float warp0 = out[channel_base + offset[i]];
-						out[channel_base + offset[i]] = (weight0 * warp0 + ww[i] * wd * color) / weight1;
-					}
-					mask[base + offset[i]] = 1;
-					weight[base + offset[i]] = weight1;
+	bool visible = depth[idx_depth] > record[idx_record];
+	if (!visible) { return; }
+
+	while (visible) {
+		if (atomicExch(&(lock[idx_record]), 1u) == 0u) {
+			visible = depth[idx_depth] > record[idx_record];
+			if (visible) {
+				for (int c = 0; c < channels; c++) {
+					size_t idx_image = batch_id * (channels * height * width) + c * (height * width) + row * width + col;
+					size_t idx_out = batch_id * (channels * height * width) + c * (height * width) + iv * width + iu;
+					out[idx_out] = image[idx_image];
 				}
-				flag = false;
-				atomicExch(&(lock[base + offset[i]]), 0u);
+				record[idx_record] = depth[idx_depth];
+				visible = false;
 			}
+			atomicExch(&(lock[idx_record]), 0u);
 		}
 	}
 }
@@ -209,27 +193,23 @@ std::vector<torch::Tensor> warp_forward_cuda(torch::Tensor image, torch::Tensor 
 	int height = image.size(2);
 	int width = image.size(3);
 
-	torch::Tensor weight = torch::zeros_like(depth);
+	torch::Tensor record = torch::zeros_like(depth);
 	torch::TensorOptions lock_option = torch::TensorOptions().dtype(torch::kInt32).device(depth.device());
 	torch::Tensor lock = torch::zeros_like(depth, lock_option);
 	TORCH_CHECK(lock.dtype() == torch::kInt32);
-	torch::TensorOptions mask_option = torch::TensorOptions().dtype(torch::kUInt8).device(depth.device());
-	torch::Tensor mask = torch::zeros_like(depth, mask_option);
-	TORCH_CHECK(mask.dtype() == torch::kUInt8);
 	torch::Tensor out = torch::zeros_like(image);
 	float* image_data = image.data<float>();
 	float* sample_data = sample.data<float>();
 	float* depth_data = depth.data<float>();
-	float* weight_data = weight.data<float>();
+	float* record_data = record.data<float>();
 	int* lock_data = lock.data<int>();
-	unsigned char* mask_data = mask.data<unsigned char>();
 	float* out_data = out.data<float>();
 
 	dim3 threads(1, 16, 16);
 	dim3 blocks(batch_size, height / 16 + 1, width / 16 + 1);
 
 	warp_forward_cuda_kernel << <blocks, threads >> > (
-		image_data, sample_data, depth_data, weight_data, mask_data, out_data, lock_data,
+		image_data, sample_data, depth_data, record_data, out_data, lock_data,
 		channels, height, width);
 
 #ifdef _DEBUG
@@ -239,7 +219,7 @@ std::vector<torch::Tensor> warp_forward_cuda(torch::Tensor image, torch::Tensor 
 	//	cudaDeviceSynchronize();
 #endif
 
-	return { out, weight, mask };
+	return { out, record };
 
 }
 

@@ -7,19 +7,19 @@ from torch.utils.tensorboard import SummaryWriter
 class WarpFuncion(torch.autograd.Function):
     @staticmethod
     def forward(ctx, image, sample, depth):
-        warped, weight, mask = libwarp.forward(
+        warped, record = libwarp.forward(
             image.contiguous(), sample.contiguous(), depth.contiguous())
-        ctx.save_for_backward(image, sample, depth, weight)
-        return warped  # , weight, mask
+        ctx.save_for_backward(image, sample, depth, record)
+        return warped, record  # , weight, mask
 
     @staticmethod
-    def backward(ctx, grad_warp):  # , grad_weight, grad_mask
-        image, sample, depth, weight = ctx.saved_tensors
+    def backward(ctx, grad_warp, grad_record):  # , grad_weight, grad_mask
+        image, sample, depth, record = ctx.saved_tensors
         grad_image = grad_sample = grad_occlusion = None
         if ctx.needs_input_grad[1]:
             grad_sample = libwarp.backward(
                 image.contiguous(), sample.contiguous(), depth.contiguous(),
-                weight.contiguous(), grad_warp.contiguous())
+                record.contiguous(), grad_warp.contiguous())
 
         return grad_image, grad_sample, grad_occlusion
 
@@ -41,15 +41,14 @@ def test1():
     grid = grid.to('cuda:0')
     grid[:, :, 32:96, 96:160] += 0.1
 
-    warp, weight, mask = WarpFuncion.apply(image, grid, depth)
+    warp, record = WarpFuncion.apply(image, grid, depth)
 
     writer = SummaryWriter()
     writer.add_images('image/image', image, 0)
     writer.add_images('image/depth', depth, 0)
     writer.add_images('image/grid', grid[:, 0:1, ...] * 0.5 + 0.5, 0)
     writer.add_images('image/warp', warp, 0)
-    writer.add_images('image/weight', weight, 0)
-    writer.add_images('image/mask', mask, 0)
+    writer.add_images('image/record', record, 0)
     writer.close()
 
 
@@ -78,8 +77,9 @@ def test2():
 
     for i in range(200):
         sample = grid + move
-        warp, weight, mask = WarpFuncion.apply(image, sample, depth) #
-        residual_warp = (warp - mask * ref).abs()
+        warp, record = WarpFuncion.apply(image, sample, depth) #
+        mask = record != 0
+        residual_warp = (warp - mask * ref).abs()  #
         loss = residual_warp.mean()
         optimizer.zero_grad()
         loss.backward()
@@ -89,7 +89,7 @@ def test2():
         writer.add_images('image/image', image, global_step=i)
         writer.add_images('image/ref', ref, global_step=i)
         writer.add_images('image/warp', warp, global_step=i)
-        writer.add_images('image/weight', weight, global_step=i)
+        writer.add_images('image/record', record, global_step=i)
         writer.add_images('image/mask', mask, global_step=i)
         writer.add_images('image/residual_warp', residual_warp, global_step=i)
         writer.add_scalar('loss', loss, global_step=i)

@@ -69,6 +69,21 @@ def cross(a, b):
     return c
 
 
+def grad(image, padding=0):
+    channles = image.shape[-3]
+    filter_x = np.array([[0.0, -0.25, 0.25], [0.0, -0.5, 0.5], [0.0, -0.25, 0.25]],
+                        dtype=np.float32)
+    filter_x = torch.from_numpy(filter_x).to(image.device).reshape(1, 1, 3, 3)
+    filter_y = np.array([[0.0, 0.0, 0.0], [-0.25, -0.5, -0.25], [0.25, 0.5, 0.25]],
+                        dtype=np.float32)
+    filter_y = torch.from_numpy(filter_y).to(image.device).reshape(1, 1, 3, 3)
+    filter_x = filter_x.repeat(channles, 1, 1, 1)
+    filter_y = filter_y.repeat(channles, 1, 1, 1)
+    grad_x = F.conv2d(image, filter_x, padding=padding, groups=channles)
+    grad_y = F.conv2d(image, filter_y, padding=padding, groups=channles)
+    return grad_x, grad_y
+
+
 def sobel(image, padding=0):
     channles = image.shape[-3]
     filter_x = np.array([[-0.25, 0.0, 0.25], [-0.5, 0.0, 0.5], [-0.25, 0.0, 0.25]],
@@ -157,16 +172,13 @@ def sample(image, uv, camera, depth):
     scope = camera_scope(camera, image.shape[-2:])
     uv = (uv - scope[..., 0:2, None, None]) / scope[..., 2:4, None, None]
     uv = 2.0 * uv - 1.0
-    sampled = function.WarpFuncion.apply(image, uv, depth)
-
-    return sampled
+    return function.WarpFuncion.apply(image, uv, depth)
 
 
 def warp(image, depth, camera, motion, occlusion=True):
     points = unproject(depth, camera)
     uv = project(points, camera, motion)
-    warped = sample(image, uv, camera, depth if occlusion else None)
-    return warped
+    return sample(image, uv, camera, depth if occlusion else None)
 
 
 def transfrom_matrix(motion):
