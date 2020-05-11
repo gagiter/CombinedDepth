@@ -86,7 +86,7 @@ class Criteria(torch.nn.Module):
             loss_regular = 0.0
             depth_down = depth_out
             image_down = image
-            for i in range(min(self.down_times, 1)):
+            for i in range(min(self.down_times, 4)):
                 scale_factor = 1.0 if i == 0 else 0.5
                 image_down = torch.nn.functional.interpolate(
                         image_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
@@ -111,7 +111,7 @@ class Criteria(torch.nn.Module):
                 data_out['regular_residual_%d' % i] = regular_residual
                 loss_regular += regular_residual.mean()
 
-            data_out['loss_regular'] = loss_regular / min(self.down_times, 1) * self.regular_weight
+            data_out['loss_regular'] = loss_regular / min(self.down_times, 4) * self.regular_weight
             loss += data_out['loss_regular']
 
         if 'depth' in data_in:

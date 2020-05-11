@@ -51,8 +51,8 @@ __global__ void warp_backward_cuda_kernel(
 		size_t idx_top = idx_center - width;
 		size_t idx_bottom = idx_center + width;
 		size_t idx_gd = batch_id * (channels * height * width) + c * (height * width) + iv * width + iu;
-		gu += grad[idx_gd] * (image[idx_left] - image[idx_right]) * (width - 1);
-		gv += grad[idx_gd] * (image[idx_top] - image[idx_bottom]) * (height - 1);
+		gu += grad[idx_gd] * (image[idx_left] - image[idx_right]); // * (width - 1);
+		gv += grad[idx_gd] * (image[idx_top] - image[idx_bottom]); // * (height - 1);
 	}
 	out[idx_u] = gu;
 	out[idx_v] = gv;
