@@ -94,14 +94,14 @@ class Criteria(torch.nn.Module):
                             depth_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
 
                 image_grad = torch.cat(util.grad(image_down), dim=1).abs().mean(dim=1, keepdim=True)
-                image_grad = torch.cat(util.grad(image_grad), dim=1).abs().mean(dim=1, keepdim=True)
+                # image_grad = torch.cat(util.grad(image_grad), dim=1).abs().mean(dim=1, keepdim=True)
 
                 depth_grad = torch.cat(util.grad(depth_down), dim=1).abs().mean(dim=1, keepdim=True)
-                depth_grad = torch.cat(util.grad(depth_grad), dim=1).abs().mean(dim=1, keepdim=True)
+                # depth_grad = torch.cat(util.grad(depth_grad), dim=1).abs().mean(dim=1, keepdim=True)
 
                 regular_weight = torch.exp(-400.0 * image_grad * image_grad)
-                regular_residual = regular_weight * depth_grad
-                # regular_residual = depth_grad
+                # regular_residual = regular_weight * depth_grad
+                regular_residual = depth_grad
 
                 data_out['regular_image_down_%d' % i] = image_down
                 data_out['regular_depth_down_%d' % i] = depth_down
