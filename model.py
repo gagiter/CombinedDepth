@@ -2,8 +2,6 @@ import torch.nn
 import torch
 # import segmentation_models_pytorch as smp
 import smp
-# import net
-import random
 
 
 class Vector(torch.nn.Module):

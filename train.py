@@ -19,7 +19,7 @@ parser.add_argument('--batch_size', type=int, default=4)
 parser.add_argument('--mini_batch_size', type=int, default=2)
 parser.add_argument('--no_cuda', action='store_true', default=False)
 parser.add_argument('--gpu_id', type=str, default='1')
-parser.add_argument('--lr', type=float, default=0.01)
+parser.add_argument('--lr', type=float, default=0.001)
 parser.add_argument('--momentum', type=float, default=0.5)
 parser.add_argument('--step_start', type=int, default=0)
 parser.add_argument('--step_number', type=int, default=5000000)
@@ -34,12 +34,12 @@ parser.add_argument('--depth_scale', type=float, default=1.0)
 parser.add_argument('--rotation_scale', type=float, default=0.5)
 parser.add_argument('--translation_scale', type=float, default=2.0)
 parser.add_argument('--down_times', type=int, default=4)
-parser.add_argument('--occlusion', type=int, default=1)
 parser.add_argument('--use_number', type=int, default=0)
 parser.add_argument('--target_pixels', type=int, default=300000)
 parser.add_argument('--target_width', type=int, default=640)
 parser.add_argument('--target_height', type=int, default=480)
 parser.add_argument('--resume', type=int, default=1)
+parser.add_argument('--warp_flag', type=int, default=0)  # 0: warp_from, 1: warp_to
 
 
 args = parser.parse_args()
@@ -67,7 +67,7 @@ def train():
         ground_weight=args.ground_weight,
         scale_weight=args.scale_weight,
         down_times=args.down_times,
-        occlusion=True if args.occlusion > 0 else False,
+        warp_flag=args.warp_flag,
     )
     pcd = o3d.geometry.PointCloud()
 
@@ -85,7 +85,6 @@ def train():
     writer.add_text('args', str(args), 0)
     model.train()
     losses = []
-    # optimiser.zero_grad()
     data_iter = iter(train_loader)
     for step in range(args.step_start, args.step_start + args.step_number):
         try:
@@ -93,12 +92,9 @@ def train():
         except StopIteration:
             data_iter = iter(train_loader)
             data_in = next(data_iter)
-        # data_in = next(train_data)
         data_out = model(data_in)
         loss = criteria(data_in, data_out)
-        # optimiser.zero_grad()
         loss.backward()
-        # optimiser.step()
         losses.append(loss.item())
         if step % (args.batch_size / args.mini_batch_size) == 0:
             optimiser.step()

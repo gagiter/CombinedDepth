@@ -15,12 +15,18 @@ torch::Tensor warp_backward(torch::Tensor image, torch::Tensor sample, torch::Te
 std::vector<torch::Tensor> warp_forward_direct(torch::Tensor image, torch::Tensor sample, torch::Tensor depth);
 torch::Tensor warp_backward_direct(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor grad);
 
+std::vector<torch::Tensor> warp_forward_record(torch::Tensor image, torch::Tensor sample, torch::Tensor depth);
+torch::Tensor warp_backward_record(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor weight, torch::Tensor grad);
+
+
 #ifndef _DEBUG
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 	m.def("forward", &warp_forward, "warp forward");
 	m.def("backward", &warp_backward, "warp backward");
-	m.def("forward_direct", &warp_forward_direct, "warp forward");
-	m.def("backward_direct", &warp_backward_direct, "warp backward");
+	m.def("forward_direct", &warp_forward_direct, "warp forward direct");
+	m.def("backward_direct", &warp_backward_direct, "warp backward direct");
+	m.def("forward_record", &warp_forward_record, "warp forward record");
+	m.def("backward_record", &warp_backward_record, "warp backward record");
 }
 #endif
 

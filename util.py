@@ -168,17 +168,26 @@ def unproject(depth, camera):
     return points
 
 
-def sample(image, uv, camera, depth):
+def sample(image, uv, camera, depth, warp_flag):
     scope = camera_scope(camera, image.shape[-2:])
     uv = (uv - scope[..., 0:2, None, None]) / scope[..., 2:4, None, None]
     uv = 2.0 * uv - 1.0
-    return function.WarpFuncion.apply(image, uv, depth)
+    if warp_flag == 0:
+        warped = function.warp.apply(image, uv)
+        mask = warped != 0
+    elif warp_flag == 1:
+        warped, record = function.warp_direct.apply(image, uv, depth)
+        mask = record != 0
+    else:
+        raise Exception('Invalid warp flag.')
+
+    return warped, mask
 
 
-def warp(image, depth, camera, motion, occlusion=True):
+def warp(image, depth, camera, motion, warp_flag):
     points = unproject(depth, camera)
     uv = project(points, camera, motion)
-    return sample(image, uv, camera, depth if occlusion else None)
+    return sample(image, uv, camera, depth, warp_flag)
 
 
 def transfrom_matrix(motion):

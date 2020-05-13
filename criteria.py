@@ -6,7 +6,7 @@ import util
 class Criteria(torch.nn.Module):
     def __init__(self, depth_weight=1.0, regular_weight=1.0,
                  ref_weight=1.0, ground_weight=1.0, scale_weight=1.0, down_times=4,
-                 scale_epsilon=1.0, occlusion=True):
+                 scale_epsilon=1.0, warp_flag=0):
         super(Criteria, self).__init__()
         self.regular_weight = regular_weight
         self.ref_weight = ref_weight
@@ -15,7 +15,7 @@ class Criteria(torch.nn.Module):
         self.scale_weight = scale_weight
         self.down_times = down_times
         self.scale_epsilon = scale_epsilon
-        self.occlusion = occlusion
+        self.warp_flag = warp_flag
 
     def forward(self, data_in, data_out):
         loss = 0.0
@@ -163,14 +163,22 @@ class Criteria(torch.nn.Module):
                     image_next_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
                 depth_down = torch.nn.functional.interpolate(
                     depth_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
-                warp_previous, record_previous = util.warp(
-                    image_down, depth_down, camera, motion_previous, self.occlusion)
-                warp_next, record_next = util.warp(
-                    image_down, depth_down, camera, motion_next, self.occlusion)
-                mask_previous = record_previous != 0.0
-                mask_next = record_next != 0.0
-                residual_previous = (image_previous_down * mask_previous - warp_previous).abs()
-                residual_next = (image_next_down * mask_next - warp_next).abs()
+                if self.warp_flag == 0:
+                    warp_previous, mask_previous = util.warp(
+                        image_previous_down, depth_down, camera, motion_previous, self.warp_flag)
+                    warp_next, mask_next = util.warp(
+                        image_next_down, depth_down, camera, motion_next, self.warp_flag)
+                    residual_previous = (image_down * mask_previous - warp_previous).abs()
+                    residual_next = (image_down * mask_next - warp_next).abs()
+                elif self.warp_flag == 1:
+                    warp_previous, mask_previous = util.warp(
+                        image_down, depth_down, camera, motion_previous, self.warp_flag)
+                    warp_next, mask_next = util.warp(
+                        image_down, depth_down, camera, motion_next, self.warp_flag)
+                    residual_previous = (image_previous_down * mask_previous - warp_previous).abs()
+                    residual_next = (image_next_down * mask_next - warp_next).abs()
+                else:
+                    raise Exception('Invalid warp flag.')
                 data_out['residual_previous_%d' % i] = residual_previous
                 data_out['residual_next_%d' % i] = residual_next
                 data_out['warp_previous_%d' % i] = warp_previous
