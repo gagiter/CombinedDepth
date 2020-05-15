@@ -40,6 +40,7 @@ parser.add_argument('--target_width', type=int, default=640)
 parser.add_argument('--target_height', type=int, default=480)
 parser.add_argument('--resume', type=int, default=1)
 parser.add_argument('--warp_flag', type=int, default=0)  # 0: warp_from, 1: warp_to
+parser.add_argument('--record_sigma', type=float, default=0.5)  # 0: warp_from, 1: warp_to
 
 
 args = parser.parse_args()
@@ -68,6 +69,7 @@ def train():
         scale_weight=args.scale_weight,
         down_times=args.down_times,
         warp_flag=args.warp_flag,
+        record_sigma=args.record_sigma,
     )
     pcd = o3d.geometry.PointCloud()
 

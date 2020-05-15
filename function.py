@@ -21,6 +21,23 @@ class warp(torch.autograd.Function):
         return grad_image, grad_sample
 
 
+class warp_wide(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, image, sample):
+        warped = libwarp.forward_wide(image.contiguous(), sample.contiguous())
+        ctx.save_for_backward(image, sample)
+        return warped
+
+    @staticmethod
+    def backward(ctx, grad_warp):
+        image, sample = ctx.saved_tensors
+        grad_image = grad_sample = None
+        if ctx.needs_input_grad[1]:
+            grad_sample = libwarp.backward_wide(
+                image.contiguous(), sample.contiguous(), grad_warp.contiguous())
+        return grad_image, grad_sample
+
+
 class warp_direct(torch.autograd.Function):
     @staticmethod
     def forward(ctx, image, sample, depth):
@@ -42,21 +59,22 @@ class warp_direct(torch.autograd.Function):
 
 class warp_record(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, image, sample, depth):
-        warped, record, weight_record, weight_warp = libwarp.forward_record(image.contiguous(), sample.contiguous(), depth.contiguous())
+    def forward(ctx, image, sample, depth, record_sigma):
+        warped, record, weight_record, weight_warp = libwarp.forward_record(
+            image.contiguous(), sample.contiguous(), depth.contiguous(), record_sigma)
         ctx.save_for_backward(image, sample, depth, record, weight_warp)
         return warped, record, weight_record, weight_warp
 
     @staticmethod
-    def backward(ctx, grad_warp, grad_record, grad_weight):
+    def backward(ctx, grad_warp, grad_record, grad_weight_record, grad_weight_warp):
         image, sample, depth, record, weight_warp = ctx.saved_tensors
-        grad_image = grad_sample = grad_depth = None
+        grad_image = grad_sample = grad_depth = grad_sigma = None
         if ctx.needs_input_grad[1]:
             grad_sample = libwarp.backward_record(
                 image.contiguous(), sample.contiguous(), depth.contiguous(),
                 record.contiguous(), weight_warp.contiguous(), grad_warp.contiguous())
 
-        return grad_image, grad_sample, grad_depth
+        return grad_image, grad_sample, grad_depth, grad_sigma
 
 
 def test_record(writer):
@@ -66,7 +84,7 @@ def test_record(writer):
     ref[:, :, 30:90, 70:170] = 0.5
 
     depth = torch.ones([1, 1, 100, 200], dtype=torch.float32, device='cuda:0') * 0.2
-    depth[:, :, 20:80, 50:150] = 0.5
+    # depth[:, :, 20:80, 50:150] = 0.5
 
     grid_x = torch.linspace(-1.0, 1.0, 200)
     grid_y = torch.linspace(-1.0, 1.0, 100)
@@ -97,8 +115,8 @@ def test_record(writer):
     writer.add_images('record/record', record, 0)
     writer.add_images('record/weight_record', weight_record, 0)
     writer.add_images('record/weight_warp', weight_warp, 0)
-    writer.add_images('record/grad_u', grad[:, 0:1, ...], 0)
-    writer.add_images('record/grad_v', grad[:, 1:2, ...], 0)
+    writer.add_images('record/grad_u', grad[:, 0:1, ...].abs(), 0)
+    writer.add_images('record/grad_v', grad[:, 1:2, ...].abs(), 0)
     writer.add_images('record/mask', mask, 0)
 
 
@@ -133,8 +151,8 @@ def test_warp(writer):
     writer.add_images('warp/grid_u', grid[:, 0:1, ...] * 0.5 + 0.5, 0)
     writer.add_images('warp/grid_v', grid[:, 1:2, ...] * 0.5 + 0.5, 0)
     writer.add_images('warp/warped', warped, 0)
-    writer.add_images('warp/grad_u', grad[:, 0:1, ...], 0)
-    writer.add_images('warp/grad_v', grad[:, 1:2, ...], 0)
+    writer.add_images('warp/grad_u', grad[:, 0:1, ...].abs(), 0)
+    writer.add_images('warp/grad_v', grad[:, 1:2, ...].abs(), 0)
 
 
 if __name__ == '__main__':

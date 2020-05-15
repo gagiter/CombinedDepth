@@ -1,5 +1,6 @@
 #include "warp.h"
 
+
 #include <cuda.h>
 #include <cuda_runtime.h>
 
@@ -16,10 +17,225 @@ void check_cuda(cudaError_t result, char const* const func, const char* file, in
 
 #endif
 
+// 0 warp
+__global__ void warp_backward_cuda_kernel(float* image, float* sample, float* grad, float* out, int channels, int height, int width);
+
+
+
+// 2 record
+std::vector<torch::Tensor> warp_forward_record(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, float sigma);
+__global__ void warp_forward_record_record_cuda_kernel(float* image, float* sample, float* depth, float* record, float* weight, int* lock, int channels, int height, int width);
+__global__ void warp_forward_record_warp_cuda_kernel(float* image, float* sample, float* depth, float* record, float* weight, float* out, int channels, int height, int width, float sigma);
+
+torch::Tensor warp_backward_record(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor weight, torch::Tensor grad, float sigma);
+torch::Tensor warp_backward_record_cuda(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor weight, torch::Tensor grad, float sigma);
+__global__ void warp_backward_record_cuda_kernel(float* image, float* sample, float* depth, float* record, float* weight, float* grad, float* out, int channels, int height, int width, float sigma);
+
+
+
+// 3 wide
+__global__ void warp_forward_wide_cuda_kernel(float* image, float* sample, float* out, int channels, int height, int width);
+torch::Tensor warp_backward_wide_cuda(torch::Tensor image, torch::Tensor sample, torch::Tensor grad);
+__global__ void warp_backward_wide_cuda_kernel(float* image, float* sample, float* grad, float* out, int channels, int height, int width);
+
+
+
+__global__ void warp_backward_wide_cuda_kernel(float* image, float* sample, float* grad, float* out, int channels, int height, int width) {
+
+	int batch_id = blockIdx.x;
+	int row = blockIdx.y * blockDim.y + threadIdx.y;
+	int col = blockIdx.z * blockDim.z + threadIdx.z;
+
+	if (row >= height || col >= width) { return; }
+
+	size_t idx_u = batch_id * (2 * height * width) + 0 * (height * width) + row * width + col;
+	size_t idx_v = batch_id * (2 * height * width) + 1 * (height * width) + row * width + col;
+
+	float u = (width - 1) * 0.5f * (sample[idx_u] + 1.0f);
+	float v = (height - 1) * 0.5f * (sample[idx_v] + 1.0f);
+
+	int iu = (int)floor(u);
+	int iv = (int)floor(v);
+
+	if (iu > 0 && iv > 0 && iu < (width - 1) && iv < (height - 1)) {
+
+		float gu = 0.0f;
+		float gv = 0.0f;
+		for (int c = 0; c < channels; c++) {
+			size_t base_channel = batch_id * (channels * height * width) + c * (height * width);
+			//size_t idx_center = base_channel + (iv + 0) * width + (iu + 0);
+			size_t idx_right = base_channel + (iv + 0) * width + (iu + 1);
+			size_t idx_left = base_channel + (iv + 0) * width + (iu - 1);
+			size_t idx_top = base_channel + (iv - 1) * width + (iu + 0);
+			size_t idx_bottom = base_channel + (iv + 1) * width + (iu + 0);
+			size_t idx_gd = base_channel + row * width + col;
+			float guu = (image[idx_right] - image[idx_left]) * 0.5f;
+			float gvv = (image[idx_bottom] - image[idx_top]) * 0.5f;
+
+			gu += grad[idx_gd] * guu * (width - 1) * 0.5f;
+			gv += grad[idx_gd] * gvv * (height - 1) * 0.5f;
+
+		}
+		out[idx_u] = gu;
+		out[idx_v] = gv;
+	}
+}
+
+
+torch::Tensor warp_backward_wide_cuda(torch::Tensor image, torch::Tensor sample, torch::Tensor grad) {
+
+	int batch_size = image.size(0);
+	int channels = image.size(1);
+	int height = image.size(2);
+	int width = image.size(3);
+
+	torch::Tensor out = torch::zeros_like(sample);
+	float* image_data = image.data<float>();
+	float* sample_data = sample.data<float>();
+	float* grad_data = grad.data<float>();
+	float* out_data = out.data<float>();
+
+	dim3 threads(1, 16, 16);
+	dim3 blocks(batch_size, height / 16 + 1, width / 16 + 1);
+
+	warp_backward_wide_cuda_kernel << <blocks, threads >> > (image_data, sample_data, grad_data, out_data, channels, height, width);
+
+#ifdef _DEBUG
+	checkCudaErrors(cudaGetLastError());
+	checkCudaErrors(cudaDeviceSynchronize());
+	//#else
+	//  cudaDeviceSynchronize();
+#endif
+
+	return out;
+}
+
+
+torch::Tensor warp_backward_wide(torch::Tensor image, torch::Tensor sample, torch::Tensor grad) {
+
+	TORCH_CHECK(image.is_contiguous());
+	TORCH_CHECK(sample.is_contiguous());
+	TORCH_CHECK(grad.is_contiguous());
+	TORCH_CHECK(image.type().is_cuda());
+	TORCH_CHECK(sample.type().is_cuda());
+	TORCH_CHECK(grad.type().is_cuda());
+	TORCH_CHECK(image.dtype() == torch::kFloat32);
+	TORCH_CHECK(sample.dtype() == torch::kFloat32);
+	TORCH_CHECK(grad.dtype() == torch::kFloat32);
+	TORCH_CHECK(image.dim() == 4);
+	TORCH_CHECK(sample.dim() == 4);
+	TORCH_CHECK(grad.dim() == 4);
+	int batch_num = image.size(0);
+	int channels = image.size(1);
+	int height = image.size(2);
+	int width = image.size(3);
+
+	TORCH_CHECK(sample.size(0) == batch_num);
+	TORCH_CHECK(sample.size(1) == 2);
+	TORCH_CHECK(sample.size(2) == height);
+	TORCH_CHECK(sample.size(3) == width);
+	TORCH_CHECK(sample.device() == image.device());
+	TORCH_CHECK(grad.size(0) == batch_num);
+	TORCH_CHECK(grad.size(1) == channels);
+	TORCH_CHECK(grad.size(2) == height);
+	TORCH_CHECK(grad.size(3) == width);
+	TORCH_CHECK(grad.device() == image.device());
+
+	return warp_backward_wide_cuda(image, sample, grad);
+}
+
+
+
+__global__ void warp_forward_wide_cuda_kernel(float* image, float* sample, float* out, int channels, int height, int width) {
+
+	int batch_id = blockIdx.x;
+	int row = blockIdx.y * blockDim.y + threadIdx.y;
+	int col = blockIdx.z * blockDim.z + threadIdx.z;
+
+	if (row >= height || col >= width) { return; }
+
+	size_t idx_u = batch_id * (2 * height * width) + 0 * (height * width) + row * width + col;
+	size_t idx_v = batch_id * (2 * height * width) + 1 * (height * width) + row * width + col;
+
+	float u = (width - 1) * 0.5f * (sample[idx_u] + 1.0f);
+	float v = (height - 1) * 0.5f * (sample[idx_v] + 1.0f);
+
+	int iu = (int)floor(u);
+	int iv = (int)floor(v);
+
+	if (iu > 0 && iv > 0 && iu < (width - 1) && iv < (height - 1)) {
+		float uu = u - iu;
+		float vv = v - iv;
+
+		for (int c = 0; c < channels; c++) {
+			size_t base_channel = batch_id * (channels * height * width) + c * (height * width);
+			size_t idx_center = base_channel + (iv + 0) * width + (iu + 0);
+			size_t idx_right = base_channel + (iv + 0) * width + (iu + 1);
+			size_t idx_left = base_channel + (iv + 0) * width + (iu - 1);
+			size_t idx_top = base_channel + (iv - 1) * width + (iu + 0);
+			size_t idx_bottom = base_channel + (iv + 1) * width + (iu + 0);
+			size_t idx_out = base_channel + row * width + col;
+			float guu = (image[idx_right] - image[idx_left]) * 0.5f;
+			float gvv = (image[idx_bottom] - image[idx_top]) * 0.5f;
+			out[idx_out] = image[idx_center] + guu * uu + gvv * vv;
+		}
+	}
+}
+
+
+torch::Tensor warp_forward_wide_cuda(torch::Tensor image, torch::Tensor sample) {
+
+	int batch_size = image.size(0);
+	int channels = image.size(1);
+	int height = image.size(2);
+	int width = image.size(3);
+
+	torch::Tensor out = torch::zeros_like(image);
+	float* image_data = image.data<float>();
+	float* sample_data = sample.data<float>();
+	float* out_data = out.data<float>();
+
+	dim3 threads(1, 16, 16);
+	dim3 blocks(batch_size, height / 16 + 1, width / 16 + 1);
+
+	warp_forward_wide_cuda_kernel << <blocks, threads >> > (image_data, sample_data, out_data, channels, height, width);
+
+#ifdef _DEBUG
+	checkCudaErrors(cudaGetLastError());
+	checkCudaErrors(cudaDeviceSynchronize());
+	//#else
+	//  cudaDeviceSynchronize();
+#endif
+
+	return out;
+}
+
+
+torch::Tensor warp_forward_wide(torch::Tensor image, torch::Tensor sample) {
+
+	TORCH_CHECK(image.is_contiguous());
+	TORCH_CHECK(sample.is_contiguous());
+	TORCH_CHECK(image.type().is_cuda());
+	TORCH_CHECK(sample.type().is_cuda());
+	TORCH_CHECK(image.dtype() == torch::kFloat32);
+	TORCH_CHECK(sample.dtype() == torch::kFloat32);
+	TORCH_CHECK(image.dim() == 4);
+	TORCH_CHECK(sample.dim() == 4);
+	TORCH_CHECK(image.size(0) == sample.size(0));
+	TORCH_CHECK(sample.size(1) == 2);
+	TORCH_CHECK(image.size(2) == sample.size(2));
+	TORCH_CHECK(image.size(3) == sample.size(3));
+	TORCH_CHECK(image.device() == sample.device());
+
+	return warp_forward_wide_cuda(image, sample);
+
+}
+
+
 
 __global__ void warp_backward_record_cuda_kernel(
 	float* image, float* sample, float* depth, float* record, float* weight, float* grad, float* out,
-	int channels, int height, int width) {
+	int channels, int height, int width, float sigma) {
 
 	int batch_id = blockIdx.x;
 	int row = blockIdx.y * blockDim.y + threadIdx.y;
@@ -43,26 +259,26 @@ __global__ void warp_backward_record_cuda_kernel(
 
 	if (wwww > 0.00001f) {
 
+		float inv_sigma2 = 1.0f / sigma / sigma;
 		float uu = u - iu;
 		float vv = v - iv;
 		int base = batch_id * height * width;
 		float d = depth[base + row * width + col];
 		int offset[4] = { iv * width + iu, iv * width + iu + 1, (iv + 1) * width + iu, (iv + 1) * width + iu + 1 };
 		float wd[4] = { d - record[base + offset[0]], d - record[base + offset[1]], d - record[base + offset[2]], d - record[base + offset[3]] };
-		float wdd[4] = { exp(-wd[0] * wd[0] * 200.0f), exp(-wd[1] * wd[1] * 200.0f), exp(-wd[2] * wd[2] * 200.0f), exp(-wd[3] * wd[3] * 200.0f) };
-		float dw_du[4] = { -(1.0f - vv) * (width - 1) * 0.5f * wdd[0] / wwww, (1.0f - vv) * (width - 1) * 0.5f * wdd[1] / wwww,
-			-vv * (width - 1) * 0.5f * wdd[2] / wwww, vv * (width - 1) * 0.5f * wdd[3] / wwww };
-		float dw_dv[4] = { -(1.0f - uu) * (height - 1) * 0.5f * wdd[0] / wwww, -uu * (height - 1) * 0.5f * wdd[1] / wwww, 
-			(1.0f - uu) * (height - 1) * 0.5f * wdd[2] / wwww, uu * (height - 1) * 0.5f * wdd[3] / wwww };
+		float wdd[4] = { exp(-wd[0] * wd[0] * 0.5f * inv_sigma2), exp(-wd[1] * wd[1] * 0.5f * inv_sigma2),
+			exp(-wd[2] * wd[2] * 0.5f * inv_sigma2), exp(-wd[3] * wd[3] * 0.5f * inv_sigma2) };
+		float dw_du[4] = { -(1.0f - vv) * wdd[0], (1.0f - vv) * wdd[1], -vv * wdd[2], vv * wdd[3] };
+		float dw_dv[4] = { -(1.0f - uu) * wdd[0], -uu * wdd[1], (1.0f - uu) * wdd[2], uu * wdd[3] };
 
 		float gu = 0.0f;
 		float gv = 0.0f;
 		for (int c = 0; c < channels; c++) {
 			size_t channel_base = batch_id * channels * height * width + c * height * width;
-			gu += grad[channel_base + row * width + col] * (dw_du[0] * image[channel_base + offset[0]] + dw_du[1] * image[channel_base + offset[1]] +
-				dw_du[2] * image[channel_base + offset[2]] + dw_du[3] * image[channel_base + offset[3]]);
-			gv += grad[channel_base + row * width + col] * (dw_dv[0] * image[channel_base + offset[0]] + dw_dv[1] * image[channel_base + offset[1]] +
-				dw_dv[2] * image[channel_base + offset[2]] + dw_dv[3] * image[channel_base + offset[3]]);
+			float g[4] = { image[channel_base + offset[0]], image[channel_base + offset[1]], image[channel_base + offset[2]], image[channel_base + offset[3]] };
+			size_t grad_idx = channel_base + row * width + col;
+			gu += grad[grad_idx] * (dw_du[0] * g[0] + dw_du[1] * g[1] + dw_du[2] * g[2] + dw_du[3] * g[3]) * (width - 1) * 0.5f / wwww;
+			gv += grad[grad_idx] * (dw_dv[0] * g[0] + dw_dv[1] * g[1] + dw_dv[2] * g[2] + dw_dv[3] * g[3]) * (height - 1) * 0.5f / wwww;
 		}
 
 		out[idx_u] = gu;
@@ -73,7 +289,7 @@ __global__ void warp_backward_record_cuda_kernel(
 }
 
 
-torch::Tensor warp_backward_record_cuda(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor weight, torch::Tensor grad) {
+torch::Tensor warp_backward_record_cuda(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor weight, torch::Tensor grad, float sigma) {
 
 	int batch_size = image.size(0);
 	int channels = image.size(1);
@@ -93,7 +309,7 @@ torch::Tensor warp_backward_record_cuda(torch::Tensor image, torch::Tensor sampl
 	dim3 blocks(batch_size, height / 16 + 1, width / 16 + 1);
 
 	warp_backward_record_cuda_kernel << <blocks, threads >> > (
-		image_data, sample_data, depth_data, record_data, weight_data, grad_data, out_data, channels, height, width);
+		image_data, sample_data, depth_data, record_data, weight_data, grad_data, out_data, channels, height, width, sigma);
 
 #ifdef _DEBUG
 	checkCudaErrors(cudaGetLastError());
@@ -106,7 +322,7 @@ torch::Tensor warp_backward_record_cuda(torch::Tensor image, torch::Tensor sampl
 }
 
 
-torch::Tensor warp_backward_record(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor weight, torch::Tensor grad) {
+torch::Tensor warp_backward_record(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor weight, torch::Tensor grad, float sigma) {
 
 
 	TORCH_CHECK(image.is_contiguous());
@@ -163,7 +379,7 @@ torch::Tensor warp_backward_record(torch::Tensor image, torch::Tensor sample, to
 	TORCH_CHECK(grad.size(3) == width);
 	TORCH_CHECK(grad.device() == image.device());
 
-	return warp_backward_record_cuda(image, sample, depth, record, weight, grad);
+	return warp_backward_record_cuda(image, sample, depth, record, weight, grad, sigma);
 }
 
 
@@ -216,7 +432,7 @@ __global__ void warp_forward_record_record_cuda_kernel(
 
 __global__ void warp_forward_record_warp_cuda_kernel(
 	float* image, float* sample, float* depth, float* record, float* weight, float* out,
-	int channels, int height, int width) {
+	int channels, int height, int width, float sigma) {
 
 	int batch_id = blockIdx.x;
 	int row = blockIdx.y * blockDim.y + threadIdx.y;
@@ -234,6 +450,7 @@ __global__ void warp_forward_record_warp_cuda_kernel(
 
 	if (iu < 0 || iu >= (width - 1) || iv < 0 || iv >= (height - 1)) { return; }
 
+	float inv_sigma2 = 1.0f / sigma / sigma;
 	float uu = u - iu;
 	float vv = v - iv;
 	int base = batch_id * height * width;
@@ -241,7 +458,8 @@ __global__ void warp_forward_record_warp_cuda_kernel(
 	float ww[4] = { (1.0f - uu) * (1.0f - vv), uu * (1.0f - vv), (1.0f - uu) * vv, uu * vv };
 	float d = depth[base + row * width + col];
 	float wd[4] = { d - record[base + offset[0]], d - record[base + offset[1]], d - record[base + offset[2]], d - record[base + offset[3]] };
-	float wdd[4] = { exp(-wd[0] * wd[0] * 200.0f), exp(-wd[1] * wd[1] * 200.0f), exp(-wd[2] * wd[2] * 200.0f), exp(-wd[3] * wd[3] * 200.0f) };
+	float wdd[4] = { exp(-wd[0] * wd[0] * 0.5f * inv_sigma2), exp(-wd[1] * wd[1] * 0.5f * inv_sigma2), 
+		exp(-wd[2] * wd[2] * 0.5f * inv_sigma2), exp(-wd[3] * wd[3] * 0.5f * inv_sigma2) };
 	float w[4] = { ww[0] * wdd[0], ww[1] * wdd[1], ww[2] * wdd[2], ww[3] * wdd[3] };
 	float wwww = w[0] + w[1] + w[2] + w[3];
 	if (wwww > 0.00001f) {
@@ -254,7 +472,7 @@ __global__ void warp_forward_record_warp_cuda_kernel(
 	}
 }
 
-std::vector<torch::Tensor> warp_forward_record_cuda(torch::Tensor image, torch::Tensor sample, torch::Tensor depth) {
+std::vector<torch::Tensor> warp_forward_record_cuda(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, float sigma) {
 
 	int batch_size = image.size(0);
 	int channels = image.size(1);
@@ -286,7 +504,7 @@ std::vector<torch::Tensor> warp_forward_record_cuda(torch::Tensor image, torch::
 
 	warp_forward_record_warp_cuda_kernel << <blocks, threads >> > (
 		image_data, sample_data, depth_data, record_data, weight_warp_data, out_data,
-		channels, height, width);
+		channels, height, width, sigma);
 
 #ifdef _DEBUG
 	checkCudaErrors(cudaGetLastError());
@@ -300,7 +518,7 @@ std::vector<torch::Tensor> warp_forward_record_cuda(torch::Tensor image, torch::
 }
 
 
-std::vector<torch::Tensor> warp_forward_record(torch::Tensor image, torch::Tensor sample, torch::Tensor depth) {
+std::vector<torch::Tensor> warp_forward_record(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, float sigma) {
 
 	TORCH_CHECK(image.is_contiguous());
 	TORCH_CHECK(sample.is_contiguous());
@@ -329,7 +547,7 @@ std::vector<torch::Tensor> warp_forward_record(torch::Tensor image, torch::Tenso
 	TORCH_CHECK(depth.size(3) == width);
 	TORCH_CHECK(depth.device() == image.device());
 
-	return warp_forward_record_cuda(image, sample, depth);
+	return warp_forward_record_cuda(image, sample, depth, sigma);
 
 }
 
@@ -798,8 +1016,9 @@ int main() {
 	std::vector<torch::Tensor> warp_direct_output = warp_forward_direct(image, sample, depth);
 	torch::Tensor grad_direct_sample = warp_backward_direct(image, sample, depth, warp_direct_output[1], grad);
 
-	std::vector<torch::Tensor> warp_record_output = warp_forward_record(image, sample, depth);
-	torch::Tensor grad_record_sample = warp_backward_record(image, sample, depth, warp_record_output[1], warp_record_output[2],  grad);
+	float sigma = 0.1f;
+	std::vector<torch::Tensor> warp_record_output = warp_forward_record(image, sample, depth, sigma);
+	torch::Tensor grad_record_sample = warp_backward_record(image, sample, depth, warp_record_output[1], warp_record_output[2],  grad, sigma);
 
 	return 0;
 }
