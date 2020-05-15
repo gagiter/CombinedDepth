@@ -90,19 +90,19 @@ class Criteria(torch.nn.Module):
             for i in range(min(self.down_times, 4)):
                 scale_factor = 1.0 if i == 0 else 0.5
                 image_down = torch.nn.functional.interpolate(
-                        image_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
+                    image_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
                 depth_down = torch.nn.functional.interpolate(
-                            depth_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
+                    depth_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
 
-                image_grad = torch.cat(util.grad(image_down), dim=1).abs().mean(dim=1, keepdim=True)
-                # image_grad = torch.cat(util.grad(image_grad), dim=1).abs().mean(dim=1, keepdim=True)
+                image_grad = torch.cat(util.sobel(image_down, padding=-1), dim=1).abs().mean(dim=1, keepdim=True)
+                # image_grad = torch.cat(util.sobel(image_grad), dim=1).abs().mean(dim=1, keepdim=True) * 10.0
 
-                depth_grad = torch.cat(util.grad(depth_down), dim=1).abs().mean(dim=1, keepdim=True)
-                # depth_grad = torch.cat(util.grad(depth_grad), dim=1).abs().mean(dim=1, keepdim=True)
+                depth_grad = torch.cat(util.sobel(depth_down), dim=1).abs().mean(dim=1, keepdim=True) * 4.0
+                depth_grad = torch.cat(util.sobel(depth_grad), dim=1).abs().mean(dim=1, keepdim=True) * 4.0
 
                 regular_weight = torch.exp(-400.0 * image_grad * image_grad)
-                # regular_residual = regular_weight * depth_grad
-                regular_residual = depth_grad
+                regular_residual = regular_weight * depth_grad
+                # regular_residual = depth_grad
 
                 data_out['regular_image_down_%d' % i] = image_down
                 data_out['regular_depth_down_%d' % i] = depth_down
@@ -183,14 +183,16 @@ class Criteria(torch.nn.Module):
                     residual_previous = (image_previous_down * mask_previous - warp_previous).abs()
                     residual_next = (image_next_down * mask_next - warp_next).abs()
                 elif self.warp_flag == 2:  # record
-                    warp_previous, _, _, _ = util.warp(
+                    warp_previous, record_previous, _, _ = util.warp(
                         image_previous_down, depth_down, camera, motion_previous, self.warp_flag)
                     mask_previous = warp_previous != 0
-                    warp_next, _, _, _ = util.warp(
+                    warp_next, record_next, _, _ = util.warp(
                         image_next_down, depth_down, camera, motion_next, self.warp_flag, self.record_sigma)
                     mask_next = warp_next != 0
                     residual_previous = (image_down * mask_previous - warp_previous).abs()
                     residual_next = (image_down * mask_next - warp_next).abs()
+                    data_out['record_previous_%d' % i] = record_previous
+                    data_out['record_next_%d' % i] = record_next
                 elif self.warp_flag == 3:  # wide
                     warp_previous = util.warp(
                         image_previous_down, depth_down, camera, motion_previous, self.warp_flag)

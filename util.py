@@ -85,7 +85,7 @@ def grad(image, padding=0):
 
 
 def sobel(image, padding=0):
-    channles = image.shape[-3]
+    _, channles, height, width = image.shape
     filter_x = np.array([[-0.25, 0.0, 0.25], [-0.5, 0.0, 0.5], [-0.25, 0.0, 0.25]],
                         dtype=np.float32)
     filter_x = torch.from_numpy(filter_x).to(image.device).reshape(1, 1, 3, 3)
@@ -94,6 +94,10 @@ def sobel(image, padding=0):
     filter_y = torch.from_numpy(filter_y).to(image.device).reshape(1, 1, 3, 3)
     filter_x = filter_x.repeat(channles, 1, 1, 1)
     filter_y = filter_y.repeat(channles, 1, 1, 1)
+    if padding < 0:
+        k = -padding
+        image = image[:, :, k:height-k, k:width-k]
+        padding = 0
     grad_x = F.conv2d(image, filter_x, padding=padding, groups=channles)
     grad_y = F.conv2d(image, filter_y, padding=padding, groups=channles)
     return grad_x, grad_y

@@ -131,6 +131,8 @@ def train():
                     writer.add_image('grad/' + key, data_out[key][0], global_step=step)
                 elif key.startswith('regular_'):
                     writer.add_image('regular/' + key, data_out[key][0], global_step=step)
+                elif key.startswith('record_'):
+                    writer.add_image('record/' + key, data_out[key][0], global_step=step)
                 elif key.startswith('ground_'):
                     writer.add_image('ground/' + key, data_out[key][0], global_step=step)
                 elif key.startswith('loss'):

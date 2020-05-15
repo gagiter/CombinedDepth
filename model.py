@@ -7,7 +7,7 @@ import smp
 class Vector(torch.nn.Module):
     def __init__(self, name='resnet34', in_channels=3, out_channels=5):
         super(Vector, self).__init__()
-        self.net = smp.encoders.get_encoder(name=name, in_channels=in_channels)
+        self.net = smp.encoders.get_encoder(name=name, in_channels=in_channels, weights='imagenet')
         last_channels = self.net.out_channels[-1]
         self.conv = torch.nn.Conv2d(last_channels, out_channels, kernel_size=3, padding=1)
 
@@ -23,7 +23,7 @@ class Matrix(torch.nn.Module):
     def __init__(self, name='resnet34', in_channels=3, out_channels=3):
         super(Matrix, self).__init__()
         self.net = smp.Unet(
-            name, encoder_weights=None, in_channels=in_channels,
+            name, encoder_weights='imagenet', in_channels=in_channels,
             classes=out_channels, activation='sigmoid')
 
     def forward(self, x):
