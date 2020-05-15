@@ -59,20 +59,20 @@ class warp_direct(torch.autograd.Function):
 
 class warp_record(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, image, sample, depth, record_sigma):
+    def forward(ctx, image, sample, depth, sigma):
         warped, record, weight_record, weight_warp = libwarp.forward_record(
-            image.contiguous(), sample.contiguous(), depth.contiguous(), record_sigma)
-        ctx.save_for_backward(image, sample, depth, record, weight_warp)
+            image.contiguous(), sample.contiguous(), depth.contiguous(), sigma)
+        ctx.save_for_backward(image, sample, depth, record, weight_warp, sigma)
         return warped, record, weight_record, weight_warp
 
     @staticmethod
     def backward(ctx, grad_warp, grad_record, grad_weight_record, grad_weight_warp):
-        image, sample, depth, record, weight_warp = ctx.saved_tensors
+        image, sample, depth, record, weight_warp, sigma = ctx.saved_tensors
         grad_image = grad_sample = grad_depth = grad_sigma = None
         if ctx.needs_input_grad[1]:
             grad_sample = libwarp.backward_record(
                 image.contiguous(), sample.contiguous(), depth.contiguous(),
-                record.contiguous(), weight_warp.contiguous(), grad_warp.contiguous())
+                record.contiguous(), weight_warp.contiguous(), grad_warp.contiguous(), sigma)
 
         return grad_image, grad_sample, grad_depth, grad_sigma
 

@@ -177,7 +177,8 @@ def sample(image, uv, camera, depth, warp_flag, record_sigma=0.5):
     elif warp_flag == 1:
         return function.warp_direct.apply(image, uv, depth)
     elif warp_flag == 2:
-        return function.warp_record.apply(image, uv, depth, record_sigma)
+        sigma_tensor = torch.ones(1, dtype=image.dtype, device=image.device) * record_sigma
+        return function.warp_record.apply(image, uv, depth, sigma_tensor)
     elif warp_flag == 3:
         return function.warp_wide.apply(image, uv)
     else:

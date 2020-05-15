@@ -23,13 +23,13 @@ __global__ void warp_backward_cuda_kernel(float* image, float* sample, float* gr
 
 
 // 2 record
-std::vector<torch::Tensor> warp_forward_record(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, float sigma);
+std::vector<torch::Tensor> warp_forward_record(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor sigma);
 __global__ void warp_forward_record_record_cuda_kernel(float* image, float* sample, float* depth, float* record, float* weight, int* lock, int channels, int height, int width);
-__global__ void warp_forward_record_warp_cuda_kernel(float* image, float* sample, float* depth, float* record, float* weight, float* out, int channels, int height, int width, float sigma);
+__global__ void warp_forward_record_warp_cuda_kernel(float* image, float* sample, float* depth, float* record, float* weight, float* sigma, float* out, int channels, int height, int width);
 
-torch::Tensor warp_backward_record(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor weight, torch::Tensor grad, float sigma);
-torch::Tensor warp_backward_record_cuda(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor weight, torch::Tensor grad, float sigma);
-__global__ void warp_backward_record_cuda_kernel(float* image, float* sample, float* depth, float* record, float* weight, float* grad, float* out, int channels, int height, int width, float sigma);
+torch::Tensor warp_backward_record(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor weight, torch::Tensor grad, torch::Tensor sigma);
+torch::Tensor warp_backward_record_cuda(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor weight, torch::Tensor grad, torch::Tensor sigma);
+__global__ void warp_backward_record_cuda_kernel(float* image, float* sample, float* depth, float* record, float* weight, float* grad, float* sigma, float* out, int channels, int height, int width);
 
 
 
@@ -234,8 +234,8 @@ torch::Tensor warp_forward_wide(torch::Tensor image, torch::Tensor sample) {
 
 
 __global__ void warp_backward_record_cuda_kernel(
-	float* image, float* sample, float* depth, float* record, float* weight, float* grad, float* out,
-	int channels, int height, int width, float sigma) {
+	float* image, float* sample, float* depth, float* record, float* weight, float* grad, float* sigma, float* out,
+	int channels, int height, int width) {
 
 	int batch_id = blockIdx.x;
 	int row = blockIdx.y * blockDim.y + threadIdx.y;
@@ -259,7 +259,7 @@ __global__ void warp_backward_record_cuda_kernel(
 
 	if (wwww > 0.00001f) {
 
-		float inv_sigma2 = 1.0f / sigma / sigma;
+		float inv_sigma2 = 1.0f / (*sigma) / (*sigma);
 		float uu = u - iu;
 		float vv = v - iv;
 		int base = batch_id * height * width;
@@ -289,7 +289,7 @@ __global__ void warp_backward_record_cuda_kernel(
 }
 
 
-torch::Tensor warp_backward_record_cuda(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor weight, torch::Tensor grad, float sigma) {
+torch::Tensor warp_backward_record_cuda(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor weight, torch::Tensor grad, torch::Tensor sigma) {
 
 	int batch_size = image.size(0);
 	int channels = image.size(1);
@@ -303,13 +303,14 @@ torch::Tensor warp_backward_record_cuda(torch::Tensor image, torch::Tensor sampl
 	float* record_data = record.data<float>();
 	float* weight_data = weight.data<float>();
 	float* grad_data = grad.data<float>();
+	float* sigma_data = sigma.data<float>();
 	float* out_data = out.data<float>();
 
 	dim3 threads(1, 16, 16);
 	dim3 blocks(batch_size, height / 16 + 1, width / 16 + 1);
 
 	warp_backward_record_cuda_kernel << <blocks, threads >> > (
-		image_data, sample_data, depth_data, record_data, weight_data, grad_data, out_data, channels, height, width, sigma);
+		image_data, sample_data, depth_data, record_data, weight_data, grad_data, sigma_data, out_data, channels, height, width);
 
 #ifdef _DEBUG
 	checkCudaErrors(cudaGetLastError());
@@ -322,7 +323,7 @@ torch::Tensor warp_backward_record_cuda(torch::Tensor image, torch::Tensor sampl
 }
 
 
-torch::Tensor warp_backward_record(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor weight, torch::Tensor grad, float sigma) {
+torch::Tensor warp_backward_record(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor weight, torch::Tensor grad, torch::Tensor sigma) {
 
 
 	TORCH_CHECK(image.is_contiguous());
@@ -331,24 +332,28 @@ torch::Tensor warp_backward_record(torch::Tensor image, torch::Tensor sample, to
 	TORCH_CHECK(record.is_contiguous());
 	TORCH_CHECK(weight.is_contiguous());
 	TORCH_CHECK(grad.is_contiguous());
+	TORCH_CHECK(sigma.is_contiguous());
 	TORCH_CHECK(image.type().is_cuda());
 	TORCH_CHECK(sample.type().is_cuda());
 	TORCH_CHECK(depth.type().is_cuda());
 	TORCH_CHECK(record.type().is_cuda());
 	TORCH_CHECK(weight.type().is_cuda());
 	TORCH_CHECK(grad.type().is_cuda());
+	TORCH_CHECK(sigma.type().is_cuda());
 	TORCH_CHECK(image.dtype() == torch::kFloat32);
 	TORCH_CHECK(sample.dtype() == torch::kFloat32);
 	TORCH_CHECK(depth.dtype() == torch::kFloat32);
 	TORCH_CHECK(record.dtype() == torch::kFloat32);
 	TORCH_CHECK(weight.dtype() == torch::kFloat32);
 	TORCH_CHECK(grad.dtype() == torch::kFloat32);
+	TORCH_CHECK(sigma.dtype() == torch::kFloat32);
 	TORCH_CHECK(image.dim() == 4);
 	TORCH_CHECK(sample.dim() == 4);
 	TORCH_CHECK(depth.dim() == 4);
 	TORCH_CHECK(record.dim() == 4);
 	TORCH_CHECK(weight.dim() == 4);
 	TORCH_CHECK(grad.dim() == 4);
+	TORCH_CHECK(sigma.dim() == 1);
 	int batch_num = image.size(0);
 	int channels = image.size(1);
 	int height = image.size(2);
@@ -378,6 +383,8 @@ torch::Tensor warp_backward_record(torch::Tensor image, torch::Tensor sample, to
 	TORCH_CHECK(grad.size(2) == height);
 	TORCH_CHECK(grad.size(3) == width);
 	TORCH_CHECK(grad.device() == image.device());
+	TORCH_CHECK(sigma.size(0) == 1);
+	TORCH_CHECK(sigma.device() == image.device());
 
 	return warp_backward_record_cuda(image, sample, depth, record, weight, grad, sigma);
 }
@@ -431,8 +438,8 @@ __global__ void warp_forward_record_record_cuda_kernel(
 
 
 __global__ void warp_forward_record_warp_cuda_kernel(
-	float* image, float* sample, float* depth, float* record, float* weight, float* out,
-	int channels, int height, int width, float sigma) {
+	float* image, float* sample, float* depth, float* record, float* weight, float* sigma, float* out,
+	int channels, int height, int width) {
 
 	int batch_id = blockIdx.x;
 	int row = blockIdx.y * blockDim.y + threadIdx.y;
@@ -450,7 +457,7 @@ __global__ void warp_forward_record_warp_cuda_kernel(
 
 	if (iu < 0 || iu >= (width - 1) || iv < 0 || iv >= (height - 1)) { return; }
 
-	float inv_sigma2 = 1.0f / sigma / sigma;
+	float inv_sigma2 = 1.0f / (*sigma) / (*sigma);
 	float uu = u - iu;
 	float vv = v - iv;
 	int base = batch_id * height * width;
@@ -472,7 +479,7 @@ __global__ void warp_forward_record_warp_cuda_kernel(
 	}
 }
 
-std::vector<torch::Tensor> warp_forward_record_cuda(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, float sigma) {
+std::vector<torch::Tensor> warp_forward_record_cuda(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor sigma) {
 
 	int batch_size = image.size(0);
 	int channels = image.size(1);
@@ -489,6 +496,7 @@ std::vector<torch::Tensor> warp_forward_record_cuda(torch::Tensor image, torch::
 	float* image_data = image.data<float>();
 	float* sample_data = sample.data<float>();
 	float* depth_data = depth.data<float>();
+	float* sigma_data = sigma.data<float>();
 	float* record_data = record.data<float>();
 	float* weight_record_data = weight_record.data<float>();
 	float* weight_warp_data = weight_warp.data<float>();
@@ -503,8 +511,8 @@ std::vector<torch::Tensor> warp_forward_record_cuda(torch::Tensor image, torch::
 		channels, height, width);
 
 	warp_forward_record_warp_cuda_kernel << <blocks, threads >> > (
-		image_data, sample_data, depth_data, record_data, weight_warp_data, out_data,
-		channels, height, width, sigma);
+		image_data, sample_data, depth_data, record_data, weight_warp_data, sigma_data, out_data,
+		channels, height, width);
 
 #ifdef _DEBUG
 	checkCudaErrors(cudaGetLastError());
@@ -518,20 +526,24 @@ std::vector<torch::Tensor> warp_forward_record_cuda(torch::Tensor image, torch::
 }
 
 
-std::vector<torch::Tensor> warp_forward_record(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, float sigma) {
+std::vector<torch::Tensor> warp_forward_record(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor sigma) {
 
 	TORCH_CHECK(image.is_contiguous());
 	TORCH_CHECK(sample.is_contiguous());
 	TORCH_CHECK(depth.is_contiguous());
+	TORCH_CHECK(sigma.is_contiguous());
 	TORCH_CHECK(image.type().is_cuda());
 	TORCH_CHECK(sample.type().is_cuda());
 	TORCH_CHECK(depth.type().is_cuda());
+	TORCH_CHECK(sigma.type().is_cuda());
 	TORCH_CHECK(image.dtype() == torch::kFloat32);
 	TORCH_CHECK(sample.dtype() == torch::kFloat32);
 	TORCH_CHECK(depth.dtype() == torch::kFloat32);
+	TORCH_CHECK(sigma.dtype() == torch::kFloat32);
 	TORCH_CHECK(image.dim() == 4);
 	TORCH_CHECK(sample.dim() == 4);
 	TORCH_CHECK(depth.dim() == 4);
+	TORCH_CHECK(sigma.dim() == 1);
 	int batch_num = image.size(0);
 	int channels = image.size(1);
 	int height = image.size(2);
@@ -546,6 +558,9 @@ std::vector<torch::Tensor> warp_forward_record(torch::Tensor image, torch::Tenso
 	TORCH_CHECK(depth.size(2) == height);
 	TORCH_CHECK(depth.size(3) == width);
 	TORCH_CHECK(depth.device() == image.device());
+	TORCH_CHECK(sigma.size(0) == 1);
+	TORCH_CHECK(sigma.device() == image.device());
+	
 
 	return warp_forward_record_cuda(image, sample, depth, sigma);
 
@@ -1016,7 +1031,8 @@ int main() {
 	std::vector<torch::Tensor> warp_direct_output = warp_forward_direct(image, sample, depth);
 	torch::Tensor grad_direct_sample = warp_backward_direct(image, sample, depth, warp_direct_output[1], grad);
 
-	float sigma = 0.1f;
+	//float sigma = 0.1f;
+	torch::Tensor sigma = torch::ones({ 1 }, option) * 0.1f;
 	std::vector<torch::Tensor> warp_record_output = warp_forward_record(image, sample, depth, sigma);
 	torch::Tensor grad_record_sample = warp_backward_record(image, sample, depth, warp_record_output[1], warp_record_output[2],  grad, sigma);
 

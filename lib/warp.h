@@ -18,8 +18,8 @@ torch::Tensor warp_backward_wide(torch::Tensor image, torch::Tensor sample, torc
 std::vector<torch::Tensor> warp_forward_direct(torch::Tensor image, torch::Tensor sample, torch::Tensor depth);
 torch::Tensor warp_backward_direct(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor grad);
 
-std::vector<torch::Tensor> warp_forward_record(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, float sigma);
-torch::Tensor warp_backward_record(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor weight, torch::Tensor grad, float sigma);
+std::vector<torch::Tensor> warp_forward_record(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor sigma);
+torch::Tensor warp_backward_record(torch::Tensor image, torch::Tensor sample, torch::Tensor depth, torch::Tensor record, torch::Tensor weight, torch::Tensor grad, torch::Tensor sigma);
 
 
 #ifndef _DEBUG
