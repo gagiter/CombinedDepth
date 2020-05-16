@@ -5,18 +5,20 @@ import util
 
 class Criteria(torch.nn.Module):
     def __init__(self, depth_weight=1.0, regular_weight=1.0,
-                 ref_weight=1.0, ground_weight=1.0, scale_weight=1.0, down_times=4,
-                 scale_epsilon=1.0, warp_flag=0, record_sigma=0.5):
+                 ref_weight=1.0, ground_weight=1.0, scale_weight=1.0, average_weight=1.0,
+                 down_times=4, scale_epsilon=1.0, warp_flag=0, record_sigma=0.5, average_depth=0.5):
         super(Criteria, self).__init__()
         self.regular_weight = regular_weight
         self.ref_weight = ref_weight
         self.depth_weight = depth_weight
         self.ground_weight = ground_weight
         self.scale_weight = scale_weight
+        self.average_weight = average_weight
         self.down_times = down_times
         self.scale_epsilon = scale_epsilon
         self.warp_flag = warp_flag
         self.record_sigma = record_sigma
+        self.average_depth = average_depth
 
     def forward(self, data_in, data_out):
         loss = 0.0
@@ -27,6 +29,12 @@ class Criteria(torch.nn.Module):
         normal, points = util.normal(depth_out, camera)
         data_out['normal'] = normal
         data_out['points'] = points
+
+        if self.average_weight > 0.0:
+            average_depth = depth_out.mean()
+            data_out['eval_average_depth'] = average_depth
+            data_out['loss_average_depth'] = (average_depth - self.average_depth).abs() * self.average_weight
+            loss += data_out['loss_average_depth']
 
         if self.scale_weight > 0.0 and 'distance_previous' in data_in and 'distance_previous' in data_in:
             motion = data_out['motion']
@@ -95,10 +103,11 @@ class Criteria(torch.nn.Module):
                     depth_down, scale_factor=scale_factor, mode='bilinear', align_corners=True)
 
                 image_grad = torch.cat(util.sobel(image_down, padding=-1), dim=1).abs().mean(dim=1, keepdim=True)
+                # image_grad = torch.max_pool2d(image_grad, 3, stride=1)
                 # image_grad = torch.cat(util.sobel(image_grad), dim=1).abs().mean(dim=1, keepdim=True) * 10.0
 
-                depth_grad = torch.cat(util.sobel(depth_down), dim=1).abs().mean(dim=1, keepdim=True) * 4.0
-                depth_grad = torch.cat(util.sobel(depth_grad), dim=1).abs().mean(dim=1, keepdim=True) * 4.0
+                depth_grad = torch.cat(util.sobel(depth_down), dim=1).abs().mean(dim=1, keepdim=True) * 1.0
+                depth_grad = torch.cat(util.sobel(depth_grad), dim=1).abs().mean(dim=1, keepdim=True) * 1.0
 
                 regular_weight = torch.exp(-400.0 * image_grad * image_grad)
                 regular_residual = regular_weight * depth_grad

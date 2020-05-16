@@ -30,6 +30,7 @@ parser.add_argument('--depth_weight', type=float, default=1.0)
 parser.add_argument('--regular_weight', type=float, default=1.0)
 parser.add_argument('--ground_weight', type=float, default=1.0)
 parser.add_argument('--scale_weight', type=float, default=1.0)
+parser.add_argument('--average_weight', type=float, default=1.0)
 parser.add_argument('--depth_scale', type=float, default=1.0)
 parser.add_argument('--rotation_scale', type=float, default=0.5)
 parser.add_argument('--translation_scale', type=float, default=2.0)
@@ -41,6 +42,7 @@ parser.add_argument('--target_height', type=int, default=480)
 parser.add_argument('--resume', type=int, default=1)
 parser.add_argument('--warp_flag', type=int, default=0)  # 0: warp_from, 1: warp_to
 parser.add_argument('--record_sigma', type=float, default=0.5)  # 0: warp_from, 1: warp_to
+parser.add_argument('--average_depth', type=float, default=0.5)  # 0: warp_from, 1: warp_to
 
 
 args = parser.parse_args()
@@ -67,9 +69,11 @@ def train():
         ref_weight=args.ref_weight,
         ground_weight=args.ground_weight,
         scale_weight=args.scale_weight,
+        average_weight=args.average_weight,
         down_times=args.down_times,
         warp_flag=args.warp_flag,
         record_sigma=args.record_sigma,
+        average_depth=args.average_depth,
     )
     pcd = o3d.geometry.PointCloud()
 
