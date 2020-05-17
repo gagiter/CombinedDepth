@@ -43,7 +43,7 @@ parser.add_argument('--resume', type=int, default=1)
 parser.add_argument('--warp_flag', type=int, default=0)  # 0: warp_from, 1: warp_to
 parser.add_argument('--regular_flag', type=int, default=0)  # 0: depth grad, 2: depth grad2, 3: normal grad
 parser.add_argument('--average_depth', type=float, default=0.5)  # 0: warp_from, 1: warp_to
-
+parser.add_argument('--sigma_scale', type=float, default=5.0)
 
 args = parser.parse_args()
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_id
@@ -72,7 +72,8 @@ def train():
         down_times=args.down_times,
         warp_flag=args.warp_flag,
         average_depth=args.average_depth,
-        regular_flag=args.regular_flag
+        regular_flag=args.regular_flag,
+        sigma_scale=args.sigma_scale
     )
     pcd = o3d.geometry.PointCloud()
 

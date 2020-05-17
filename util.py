@@ -54,7 +54,7 @@ def hit_plane(ground, camera, image):
 
 def normal(depth, camera):
     points = unproject(depth, camera)
-    points = points[:, 0:3, ...] / (points[:, 3:4, ...] + 0.00001)
+    points = points[:, 0:3, ...] / points[:, 3:4, ...]
     grad_x, grad_y = sobel(points, padding=0)
     normals = cross(grad_x, grad_y)
     normals = torch.nn.functional.normalize(normals)

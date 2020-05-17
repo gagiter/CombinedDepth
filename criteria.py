@@ -7,7 +7,7 @@ class Criteria(torch.nn.Module):
     def __init__(self, depth_weight=1.0, regular_weight=1.0,
                  ref_weight=1.0, ground_weight=1.0, scale_weight=1.0, average_weight=1.0,
                  down_times=4, scale_epsilon=1.0, warp_flag=0,
-                 average_depth=0.5, regular_flag=0):
+                 average_depth=0.5, regular_flag=0, sigma_scale=5.0):
         super(Criteria, self).__init__()
         self.regular_weight = regular_weight
         self.ref_weight = ref_weight
@@ -19,8 +19,9 @@ class Criteria(torch.nn.Module):
         self.scale_epsilon = scale_epsilon
         self.warp_flag = warp_flag
         self.average_depth = average_depth
-        self.previous_sigma = 1.0
-        self.next_sigma = 1.0
+        self.previous_sigma = 1.0 * sigma_scale
+        self.next_sigma = 1.0 * sigma_scale
+        self.sigma_scale = sigma_scale
         self.regular_flag = regular_flag
 
     def forward(self, data_in, data_out):
@@ -111,7 +112,7 @@ class Criteria(torch.nn.Module):
                         image_grad = torch.cat(util.sobel(image_down), dim=1) \
                             .abs().mean(dim=1, keepdim=True)
                     elif self.regular_flag == 1:  # depth grad2
-                        regular_grad = util.sobel(depth_down)
+                        regular_grad = torch.cat(util.sobel(depth_down), dim=1)
                         regular_grad = torch.cat(util.sobel(regular_grad), dim=1) \
                             .abs().mean(dim=1, keepdim=True)
                         image_grad = torch.cat(util.sobel(image_down, padding=-1), dim=1) \
@@ -122,10 +123,20 @@ class Criteria(torch.nn.Module):
                             .abs().mean(dim=1, keepdim=True)
                         image_grad = torch.cat(util.sobel(image_down, padding=-1), dim=1) \
                             .abs().mean(dim=1, keepdim=True)
+                    elif self.regular_flag == 3:  # normal grad 2
+                        points = util.unproject(depth_down, camera)
+                        points = points[:, 0:3, ...] * points[:, 3:4, ...]
+                        grad_x, grad_y = util.sobel(points, padding=0)
+                        normal_down = util.cross(grad_x, grad_y)
+                        normal_down = torch.nn.functional.normalize(normal_down)
+                        regular_grad = torch.cat(util.sobel(normal_down), dim=1) \
+                            .abs().mean(dim=1, keepdim=True)
+                        image_grad = torch.cat(util.sobel(image_down, padding=-1), dim=1) \
+                            .abs().mean(dim=1, keepdim=True)
                     else:
                         raise Exception("Invalid regular flag")
                     image_grad_inv = torch.exp(-100.0 * image_grad * image_grad)
-                    regular_residual = regular_grad * regular_grad * image_grad_inv
+                    regular_residual = regular_grad * regular_grad * image_grad_inv  # *   # * image_grad_inv
                     data_out['regular_grad_grad%d' % i] = regular_grad
                     data_out['regular_image_inv_%d' % i] = image_grad_inv
                     data_out['regular_residual_%d' % i] = regular_residual
@@ -204,11 +215,11 @@ class Criteria(torch.nn.Module):
                 elif self.warp_flag == 2:  # record
                     warp_previous, record_previous, _, weight_previous = util.warp(
                         image_previous_down, depth_down, camera, motion_previous,
-                        self.warp_flag, self.previous_sigma + 1.0)
+                        self.warp_flag, self.previous_sigma)
                     mask_previous = weight_previous
                     warp_next, record_next, _, weight_next = util.warp(
                         image_next_down, depth_down, camera, motion_next,
-                        self.warp_flag, self.next_sigma + 1.0)
+                        self.warp_flag, self.next_sigma)
                     mask_next = weight_next
                     residual_previous = ((image_down - warp_previous) * weight_previous).abs()
                     residual_next = ((image_down - warp_next) * weight_next).abs()
@@ -235,9 +246,11 @@ class Criteria(torch.nn.Module):
                 loss_next += residual_next.sum() / (mask_next.sum() + 1)
             sigma_momentum = 0.99
             self.previous_sigma = sigma_momentum * self.previous_sigma + \
-                (1.0 - sigma_momentum) * loss_previous.item() / self.down_times
+                (1.0 - sigma_momentum) * loss_previous.item() * \
+                self.sigma_scale / self.down_times
             self.next_sigma = sigma_momentum * self.next_sigma + \
-                (1.0 - sigma_momentum) * loss_next.item() / self.down_times
+                (1.0 - sigma_momentum) * loss_next.item() * \
+                self.sigma_scale / self.down_times
             data_out['eval_previous_sigma'] = self.previous_sigma
             data_out['eval_next_sigma'] = self.next_sigma
             data_out['loss_previous'] = loss_previous / self.down_times * self.ref_weight
