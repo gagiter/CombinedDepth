@@ -41,7 +41,7 @@ parser.add_argument('--target_width', type=int, default=640)
 parser.add_argument('--target_height', type=int, default=480)
 parser.add_argument('--resume', type=int, default=1)
 parser.add_argument('--warp_flag', type=int, default=0)  # 0: warp_from, 1: warp_to
-parser.add_argument('--record_sigma', type=float, default=0.5)  # 0: warp_from, 1: warp_to
+parser.add_argument('--regular_flag', type=int, default=0)  # 0: depth grad, 2: depth grad2, 3: normal grad
 parser.add_argument('--average_depth', type=float, default=0.5)  # 0: warp_from, 1: warp_to
 
 
@@ -62,7 +62,6 @@ def train():
                   translation_scale=args.translation_scale,
                   depth_scale=args.depth_scale)
 
-    date_time = datetime.now().strftime("%Y_%m_%d_%H_%M_%S_")
     criteria = Criteria(
         depth_weight=args.depth_weight,
         regular_weight=args.regular_weight,
@@ -72,8 +71,8 @@ def train():
         average_weight=args.average_weight,
         down_times=args.down_times,
         warp_flag=args.warp_flag,
-        record_sigma=args.record_sigma,
         average_depth=args.average_depth,
+        regular_flag=args.regular_flag
     )
     pcd = o3d.geometry.PointCloud()
 
@@ -86,8 +85,13 @@ def train():
         optimiser.load_state_dict(torch.load(os.path.join(load_dir, 'optimiser.pth')))
         if os.path.exists(os.path.join(load_dir, 'step.pth')):
             args.step_start = torch.load(os.path.join(load_dir, 'step.pth'))['step']
+        if os.path.exists(os.path.join(load_dir, 'sigma.pth')):
+            sigma = torch.load(os.path.join(load_dir, 'sigma.pth'))
+            criteria.previous_sigma = sigma['previous_sigma']
+            criteria.next_sigma = sigma['next_sigma']
 
-    writer = SummaryWriter(os.path.join('runs', date_time + args.model_name))
+    date_time = datetime.now().strftime("_%Y_%m_%d_%H_%M_%S")
+    writer = SummaryWriter(os.path.join('runs', args.model_name + date_time))
     writer.add_text('args', str(args), 0)
     model.train()
     losses = []
@@ -153,6 +157,8 @@ def train():
             torch.save(model.state_dict(), os.path.join(save_dir, 'model.pth'))
             torch.save(optimiser.state_dict(), os.path.join(save_dir, 'optimiser.pth'))
             torch.save({'step': step}, os.path.join(save_dir, 'step.pth'))
+            torch.save({'previous_sigma': criteria.previous_sigma,
+                        'next_sigma': criteria.next_sigma}, os.path.join(save_dir, 'sigma.pth'))
 
             points = data_out['points'][0].data.cpu().numpy()
             points = points.transpose(1, 2, 0).reshape(-1, 3)

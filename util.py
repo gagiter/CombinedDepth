@@ -55,7 +55,7 @@ def hit_plane(ground, camera, image):
 def normal(depth, camera):
     points = unproject(depth, camera)
     points = points[:, 0:3, ...] / (points[:, 3:4, ...] + 0.00001)
-    grad_x, grad_y = sobel(points, padding=1)
+    grad_x, grad_y = sobel(points, padding=0)
     normals = cross(grad_x, grad_y)
     normals = torch.nn.functional.normalize(normals)
     return normals, points
@@ -86,10 +86,10 @@ def grad(image, padding=0):
 
 def sobel(image, padding=0):
     _, channles, height, width = image.shape
-    filter_x = np.array([[-0.25, 0.0, 0.25], [-0.5, 0.0, 0.5], [-0.25, 0.0, 0.25]],
+    filter_x = np.array([[-1.0, 0.0, 1.0], [-2.0, 0.0, 2.0], [-1.0, 0.0, 1.0]],
                         dtype=np.float32)
     filter_x = torch.from_numpy(filter_x).to(image.device).reshape(1, 1, 3, 3)
-    filter_y = np.array([[-0.25, -0.5, -0.25], [0.0, 0.0, 0.0], [0.25, 0.5, 0.25]],
+    filter_y = np.array([[-1.0, -2.0, -1.0], [0.0, 0.0, 0.0], [1.0, 2.0, 1.0]],
                         dtype=np.float32)
     filter_y = torch.from_numpy(filter_y).to(image.device).reshape(1, 1, 3, 3)
     filter_x = filter_x.repeat(channles, 1, 1, 1)
@@ -197,40 +197,45 @@ def warp(image, depth, camera, motion, warp_flag=0, record_sigma=0.5):
 
 def transfrom_matrix(motion):
 
-    zeros = torch.zeros([motion.shape[0]], dtype=motion.dtype, device=motion.device)
-    ones = torch.ones([motion.shape[0]], dtype=motion.dtype, device=motion.device)
-
-    bank = motion[..., 0]
-    heading = motion[..., 1]
-    altitude = motion[..., 2]
+    rx = motion[..., 0]
+    ry = motion[..., 1]
+    rz = motion[..., 2]
     tx = motion[..., 3]
     ty = motion[..., 4]
     tz = motion[..., 5]
     
-    sa = torch.sin(altitude)
-    ca = torch.cos(altitude)
-    sb = torch.sin(bank)
-    cb = torch.cos(bank)
-    sh = torch.sin(heading)
-    ch = torch.cos(heading)
+    srx = torch.sin(rx)
+    crx = torch.cos(rx)
+    sry = torch.sin(ry)
+    cry = torch.cos(ry)
+    srz = torch.sin(rz)
+    crz = torch.cos(rz)
 
-    r00 = ch * ca
-    r01 = sh * sb - ch * sa * cb
-    r02 = ch * sa * sb + sh * cb
-    r10 = sa
-    r11 = ca * cb
-    r12 = -ca * sb
-    r20 = -sh * ca
-    r21 = sh * sa * cb + ch * sb
-    r22 = -sh * sa * sb + ch * cb
+    zeros = torch.zeros([motion.shape[0]], dtype=motion.dtype, device=motion.device)
+    ones = torch.ones([motion.shape[0]], dtype=motion.dtype, device=motion.device)
 
-    m0 = torch.stack([r00, r01, r02, tx], dim=-1)
-    m1 = torch.stack([r10, r11, r12, ty], dim=-1)
-    m2 = torch.stack([r20, r21, r22, tz], dim=-1)
-    m3 = torch.stack([zeros, zeros, zeros, ones], dim=-1)
-    m = torch.stack([m0, m1, m2, m3], dim=1)
+    Rx0 = torch.stack([ones, zeros, zeros], dim=-1)
+    Rx1 = torch.stack([zeros, crx, -srx], dim=-1)
+    Rx2 = torch.stack([zeros, srx, crx], dim=-1)
+    Rx = torch.stack([Rx0, Rx1, Rx2], dim=1)
 
-    return m
+    Ry0 = torch.stack([cry, zeros, sry], dim=-1)
+    Ry1 = torch.stack([zeros, ones, zeros], dim=-1)
+    Ry2 = torch.stack([-sry, zeros, cry], dim=-1)
+    Ry = torch.stack([Ry0, Ry1, Ry2], dim=1)
+
+    Rz0 = torch.stack([crz, -srz, zeros], dim=-1)
+    Rz1 = torch.stack([srz, crz, zeros], dim=-1)
+    Rz2 = torch.stack([zeros, zeros, ones], dim=-1)
+    Rz = torch.stack([Rz0, Rz1, Rz2], dim=1)
+
+    R = torch.matmul(Rz, torch.matmul(Ry, Rx))
+    t = torch.stack([tx, ty, tz], dim=-1).unsqueeze(-1)
+    Rt = torch.cat([R, t], dim=-1)
+    m3 = torch.stack([zeros, zeros, zeros, ones], dim=-1).unsqueeze(1)
+    M = torch.cat([Rt, m3], dim=1)
+
+    return M
 
 
 def transform(motion, points):
