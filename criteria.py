@@ -77,6 +77,7 @@ class Criteria(torch.nn.Module):
 
             ground_for_dist = torch.cat([ground_normal.detach(), ground_d], dim=1)
             ground_dist = util.plane_dist(ground_for_dist, camera.detach(), depth_out.detach()).abs()
+            ground_dist = ground_dist[:, :, 1:-1, 1:-1]
             data_out['ground_dist'] = ground_dist
             dist_weight = torch.pow(ground_dist.detach(), 2.0)
             dist_weight = torch.exp(-25.0 * dist_weight)
