@@ -40,30 +40,28 @@ class Criteria(torch.nn.Module):
             data_out['loss_average_depth'] = (average_depth - self.average_depth).abs() * self.average_weight
             loss += data_out['loss_average_depth']
 
-        if self.scale_weight > 0.0 and 'distance_previous' in data_in and 'distance_previous' in data_in:
+        if self.scale_weight > 0.0 and 'distance_previous' in data_in and 'distance_next' in data_in:
             motion = data_out['motion']
             scale = data_out['scale']
             data_out['eval_scale'] = scale.mean()
+
             # distance previous
             dp_in = data_in['distance_previous']
-            mask = dp_in > 0.25
-            if torch.any(mask):
-                dp_out = torch.norm(motion[:, 3:6].detach(), dim=1, keepdim=True)
-                loss_scale_previous = (1.0 - dp_out[mask] * scale[mask] / dp_in[mask]).abs().mean()
-                data_out['loss_scale_previous'] = loss_scale_previous * self.scale_weight
-                loss += data_out['loss_scale_previous']
-                data_out['eval_dp_in'] = dp_in[mask].mean()
-                data_out['eval_dp_out'] = dp_out[mask].mean()
+            dp_out = torch.norm(motion[:, 3:6].detach(), dim=1, keepdim=True)
+            loss_scale_previous = (dp_out * scale - dp_in).abs().mean()
+            data_out['loss_scale_previous'] = loss_scale_previous * self.scale_weight
+            loss += data_out['loss_scale_previous']
+            data_out['eval_dp_in'] = dp_in.mean()
+            data_out['eval_dp_out'] = dp_out.mean()
+
             # distance next
             dn_in = data_in['distance_next']
-            mask = dn_in > 0.25
-            if torch.any(mask):
-                dn_out = torch.norm(motion[:, 9:12].detach(), dim=1, keepdim=True)
-                loss_scale_next = (1.0 - dn_out[mask] * scale[mask] / dn_in[mask]).abs().mean()
-                data_out['loss_scale_next'] = loss_scale_next * self.scale_weight
-                loss += data_out['loss_scale_next']
-                data_out['eval_dn_in'] = dn_in[mask].mean()
-                data_out['eval_dn_out'] = dn_out[mask].mean()
+            dn_out = torch.norm(motion[:, 9:12].detach(), dim=1, keepdim=True)
+            loss_scale_next = (dn_out * scale - dn_in).abs().mean()
+            data_out['loss_scale_next'] = loss_scale_next * self.scale_weight
+            loss += data_out['loss_scale_next']
+            data_out['eval_dn_in'] = dn_in.mean()
+            data_out['eval_dn_out'] = dn_out.mean()
 
         if self.ground_weight > 0.0:
             ground_grid = util.plane_grid(ground.detach(), camera.detach(), image.shape, image.device)
